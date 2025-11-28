@@ -299,7 +299,7 @@ check_update_frequency() {
     last_update_file=$(find "$LOG_DIR" -name "update-*.log" -type f 2>/dev/null | sort -r | head -1)
 
     if [ -z "$last_update_file" ]; then
-        log_info "Kein vorheriges Update gefunden - erstes Update"
+        log_info "$(t 'log_no_previous_update')"
         return 0
     fi
 
@@ -310,7 +310,7 @@ check_update_frequency() {
     local days_ago=$(( (current_time - last_update_time) / 86400 ))
 
     if [ $days_ago -gt 14 ]; then
-        log_warning "Letztes Update vor $days_ago Tagen! Regelmäßige Updates (wöchentlich) empfohlen."
+        log_warning "$(t 'log_last_update_days') $days_ago $(t 'days')! $(t 'log_regular_updates_recommended')"
         echo ""
         echo "⚠️  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "   $(t 'warning_last_update') $days_ago $(t 'days')!"
@@ -319,7 +319,7 @@ check_update_frequency() {
         echo "   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
     elif [ $days_ago -gt 7 ]; then
-        log_info "Letztes Update vor $days_ago Tagen"
+        log_info "$(t 'log_last_update_days') $days_ago $(t 'days')"
         echo "ℹ️  $(t 'last_update_days_ago') $days_ago $(t 'days')"
     fi
 }
@@ -367,7 +367,7 @@ generate_error_report() {
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     } > "$error_file"
 
-    log_error "Fehler-Report erstellt: $error_file"
+    log_error "$(t 'log_error_report_created') $error_file"
     echo ""
     echo "❌ $(t 'error_occurred')"
     echo "   $(t 'error_report_created') $error_file"
@@ -399,7 +399,7 @@ EOF
 cleanup_on_error() {
     local exit_code=$?
     if [ $exit_code -ne 0 ]; then
-        log_error "Script wurde mit Fehler beendet (Exit-Code: $exit_code)"
+        log_error "$(t 'log_script_error_exit') $exit_code)"
         notify-send "Update fehlgeschlagen!" "Bitte Logs prüfen: $LOG_FILE" 2>/dev/null || true
         # Terminal offen halten bei Fehlern
         if [ -t 0 ] && [ -t 1 ]; then
@@ -426,10 +426,10 @@ download_with_retry() {
         
         retry=$((retry + 1))
         if [ $retry -lt $max_retries ]; then
-            log_warning "Download fehlgeschlagen, Versuch $retry/$max_retries..."
+            log_warning "$(t 'log_download_failed_retry') $retry/$max_retries..."
             sleep 2
         else
-            log_error "Download nach $max_retries Versuchen fehlgeschlagen!"
+            log_error "$(t 'log_download_failed_after') $max_retries $(t 'log_attempts_failed')"
             return 1
         fi
     done
@@ -447,11 +447,11 @@ cleanup_old_logs
 # System-Info sammeln
 collect_system_info
 
-log_info "CachyOS Multi-Updater Version $SCRIPT_VERSION"
-log_info "Update gestartet..."
-log_info "Log-Datei: $LOG_FILE"
-[ "$DRY_RUN" = "true" ] && log_info "DRY-RUN Modus aktiviert"
-[ "$ENABLE_COLORS" = "true" ] && log_info "Farbige Ausgabe aktiviert"
+log_info "$(t 'log_version') $SCRIPT_VERSION"
+log_info "$(t 'log_update_started')"
+log_info "$(t 'log_file') $LOG_FILE"
+[ "$DRY_RUN" = "true" ] && log_info "$(t 'log_dry_run_enabled')"
+[ "$ENABLE_COLORS" = "true" ] && log_info "$(t 'log_colors_enabled')"
 
 # Prüfe Update-Häufigkeit
 check_update_frequency
@@ -470,7 +470,7 @@ if [ "$DRY_RUN" != "true" ]; then
     echo -e "${COLOR_INFO}🔐 $(t 'sudo_required')${COLOR_RESET}"
     echo ""
     sudo -v || {
-        log_error "Sudo authentication failed"
+        log_error "$(t 'sudo_failed')"
         echo ""
         echo -e "${COLOR_ERROR}❌ $(t 'sudo_failed')${COLOR_RESET}"
         exit $EXIT_UPDATE_ERROR
@@ -496,34 +496,34 @@ if [ "$UPDATE_SYSTEM" = "true" ]; then
     CURRENT_STEP=$((CURRENT_STEP + 1))
     show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'system_updates')" "🔄"
 
-    log_info "Starte CachyOS-Update..."
+    log_info "$(t 'log_starting_system_update')"
     show_system_update_start
 
     if [ "$DRY_RUN" = "true" ]; then
         packages_available=$(pacman -Qu 2>/dev/null | wc -l || echo "0")
-        log_info "[DRY-RUN] Verfügbare Updates: $packages_available Pakete"
-        log_info "[DRY-RUN] Würde ausführen: sudo pacman -Syu --noconfirm"
+        log_info "$(t 'log_dry_run_available_updates') $packages_available $(t 'packages')"
+        log_info "$(t 'log_dry_run_would_execute') sudo pacman -Syu --noconfirm"
     else
         # Zähle Pakete VOR dem Update
         SYSTEM_PACKAGES=$(pacman -Qu 2>/dev/null | wc -l || echo "0")
         # Bereinige Newlines und Whitespace
         SYSTEM_PACKAGES=$(echo "$SYSTEM_PACKAGES" | tr -d '\n\r' | xargs)
-        log_info "Zu aktualisierende Pakete: $SYSTEM_PACKAGES"
+        log_info "$(t 'log_packages_to_update') $SYSTEM_PACKAGES"
 
         # Führe Pacman-Update durch
         if sudo pacman -Syu --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
             SYSTEM_UPDATED=true
-            log_success "CachyOS-Update erfolgreich ($SYSTEM_PACKAGES Pakete aktualisiert)"
+            log_success "$(t 'log_system_update_success') ($SYSTEM_PACKAGES $(t 'log_packages_updated'))"
             show_system_update_result "$SYSTEM_PACKAGES"
             show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'system_updates')" "✅"
         else
-            log_error "Pacman-Update fehlgeschlagen!"
+            log_error "$(t 'log_pacman_update_failed')"
             show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'system_updates')" "❌"
             exit $EXIT_UPDATE_ERROR
         fi
     fi
 else
-    log_info "System-Update übersprungen (deaktiviert)"
+    log_info "$(t 'log_system_update_skipped')"
 fi
 
 # ========== AUR updaten ==========
@@ -531,62 +531,89 @@ if [ "$UPDATE_AUR" = "true" ]; then
     CURRENT_STEP=$((CURRENT_STEP + 1))
     show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'aur_updates')" "🔄"
 
-    log_info "Starte AUR-Update..."
+    log_info "$(t 'log_starting_aur_update')"
     show_aur_update_start
 
     if [ "$DRY_RUN" = "true" ]; then
         if command -v yay >/dev/null 2>&1; then
-            log_info "[DRY-RUN] Würde ausführen: yay -Syu --noconfirm"
+            log_info "$(t 'log_dry_run_would_execute') yay -Syu --noconfirm"
         elif command -v paru >/dev/null 2>&1; then
-            log_info "[DRY-RUN] Würde ausführen: paru -Syu --noconfirm"
+            log_info "$(t 'log_dry_run_would_execute') paru -Syu --noconfirm"
         else
-            log_warning "[DRY-RUN] Kein AUR-Helper gefunden"
+            log_warning "$(t 'log_dry_run_no_aur_helper')"
         fi
     else
         if command -v yay >/dev/null 2>&1; then
-            log_info "Verwende yay als AUR-Helper"
+            log_info "$(t 'log_using_yay')"
             AUR_PACKAGES=$(yay -Qua 2>/dev/null | wc -l || echo "0")
             if yay -Syu --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
                 AUR_UPDATED=true
-                log_success "AUR-Update mit yay erfolgreich"
+                log_success "$(t 'log_aur_update_success_yay')"
                 show_aur_update_result "$AUR_PACKAGES"
                 show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'aur_updates')" "✅"
             else
-                log_warning "AUR-Update mit yay hatte Warnungen"
+                log_warning "$(t 'log_aur_update_warnings_yay')"
                 show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'aur_updates')" "⚠️"
             fi
         elif command -v paru >/dev/null 2>&1; then
-            log_info "Verwende paru als AUR-Helper"
+            log_info "$(t 'log_using_paru')"
             AUR_PACKAGES=$(paru -Qua 2>/dev/null | wc -l || echo "0")
             if paru -Syu --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
                 AUR_UPDATED=true
-                log_success "AUR-Update mit paru erfolgreich"
+                log_success "$(t 'log_aur_update_success_paru')"
                 show_aur_update_result "$AUR_PACKAGES"
                 show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'aur_updates')" "✅"
             else
-                log_warning "AUR-Update mit paru hatte Warnungen"
+                log_warning "$(t 'log_aur_update_warnings_paru')"
                 show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'aur_updates')" "⚠️"
             fi
         else
-            log_warning "Kein AUR-Helper (yay/paru) gefunden – überspringe AUR."
+            log_warning "$(t 'log_no_aur_helper_found')"
             show_component_not_found "yay/paru"
             show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'aur_updates')" "⏭️"
         fi
     fi
 else
-    log_info "AUR-Update übersprungen (deaktiviert)"
+    log_info "$(t 'log_aur_update_skipped')"
 fi
+
+# ========== Installationsmethode-Erkennung ==========
+detect_cursor_installation_method() {
+    # Gibt zurück: "pacman", "aur", oder "manual"
+    if pacman -Q cursor 2>/dev/null | grep -q cursor; then
+        echo "pacman"
+    elif pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
+        echo "aur"
+    else
+        echo "manual"
+    fi
+}
+
+detect_adguard_installation_method() {
+    # Gibt zurück: "pacman", "aur", oder "manual"
+    if pacman -Q adguard-home 2>/dev/null | grep -q adguard-home; then
+        echo "pacman"
+    elif pacman -Q adguard-home-bin 2>/dev/null | grep -q adguard-home-bin || pacman -Q adguardhome 2>/dev/null | grep -q adguardhome; then
+        echo "aur"
+    elif [[ -f "$HOME/AdGuardHome/AdGuardHome" ]]; then
+        echo "manual"
+    else
+        echo "not_installed"
+    fi
+}
 
 # ========== Cursor updaten ==========
 if [ "$UPDATE_CURSOR" = "true" ]; then
     CURRENT_STEP=$((CURRENT_STEP + 1))
     show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "🔄"
 
-    log_info "Starte Cursor-Update..."
+    log_info "$(t 'log_starting_cursor_update')"
     show_cursor_update_start
     
     if [ "$DRY_RUN" = "true" ]; then
         if command -v cursor >/dev/null 2>&1; then
+            CURSOR_INSTALL_METHOD=$(detect_cursor_installation_method)
+            log_info "[DRY-RUN] Cursor Installationsmethode: $CURSOR_INSTALL_METHOD"
             # Versuche package.json zu finden (ohne cursor --version aufzurufen!)
             CURSOR_PATH=$(which cursor)
             CURSOR_INSTALL_DIR=$(dirname "$(readlink -f "$CURSOR_PATH")")
@@ -595,7 +622,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                 CURRENT_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "unbekannt")
             fi
             log_info "[DRY-RUN] Aktuelle Cursor-Version: $CURRENT_VERSION"
-            log_info "[DRY-RUN] Würde Cursor herunterladen und aktualisieren"
+            log_info "[DRY-RUN] Würde Cursor entsprechend der Installationsmethode aktualisieren"
         else
             log_warning "[DRY-RUN] Cursor nicht gefunden"
         fi
@@ -603,25 +630,42 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
         log_warning "Cursor nicht gefunden – bitte manuell installieren!"
         show_component_not_found "Cursor"
     else
-        # Prüfe, ob Cursor über pacman/AUR installiert ist
-        if pacman -Q cursor 2>/dev/null | grep -q cursor; then
-            CURSOR_PACMAN_VERSION=$(pacman -Q cursor | awk '{print $2}')
-            log_info "Cursor ist über pacman installiert (Version: $CURSOR_PACMAN_VERSION)"
-            show_cursor_pacman_managed "$CURSOR_PACMAN_VERSION"
-            log_info "Cursor-Update übersprungen (wird über pacman verwaltet)"
-            show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
-        elif pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
-            CURSOR_AUR_VERSION=$(pacman -Q cursor-bin | awk '{print $2}')
-            log_info "Cursor ist über AUR installiert (Version: $CURSOR_AUR_VERSION)"
-            show_cursor_pacman_managed "$CURSOR_AUR_VERSION"
-            log_info "Cursor-Update übersprungen (wird über AUR verwaltet)"
-            show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
-        else
+        # Erkenne Installationsmethode
+        CURSOR_INSTALL_METHOD=$(detect_cursor_installation_method)
+        log_info "$(t 'log_cursor_install_method_detected') $CURSOR_INSTALL_METHOD"
+        
+        case "$CURSOR_INSTALL_METHOD" in
+            "pacman")
+                # Über pacman installiert → wird über System-Updates verwaltet
+                CURSOR_PACMAN_VERSION=$(pacman -Q cursor | awk '{print $2}')
+                log_info "Cursor ist über pacman installiert (Version: $CURSOR_PACMAN_VERSION)"
+                log_info "Update-Methode: Wird über System-Updates (pacman -Syu) verwaltet"
+                show_cursor_pacman_managed "$CURSOR_PACMAN_VERSION"
+                log_info "Cursor-Update übersprungen (wird über pacman verwaltet)"
+                show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
+                ;;
+            "aur")
+                # Über AUR installiert → prüfe auf direktes Update (kann neuer sein als AUR)
+                CURSOR_AUR_VERSION=$(pacman -Q cursor-bin | awk '{print $2}')
+                log_info "$(t 'log_cursor_aur_installed') $CURSOR_AUR_VERSION)"
+                log_info "$(t 'log_update_method_direct')"
+                # Fahre mit Update-Prüfung fort
+                ;;
+            "manual")
+                # Manuell installiert → direktes Update
+                log_info "$(t 'log_cursor_manual_installed')"
+                log_info "$(t 'log_update_method_manual')"
+                # Fahre mit Update-Prüfung fort
+                ;;
+        esac
+        
+        # Wenn nicht über pacman installiert, fahre mit Update-Prüfung fort
+        if [ "$CURSOR_INSTALL_METHOD" != "pacman" ]; then
             # Cursor-Pfad finden
             CURSOR_PATH=$(which cursor)
             CURSOR_INSTALL_DIR=$(dirname "$(readlink -f "$CURSOR_PATH")")
 
-            log_info "Cursor gefunden in: $CURSOR_INSTALL_DIR"
+            log_info "$(t 'log_cursor_found_in') $CURSOR_INSTALL_DIR"
 
             # Aktuelle Version ermitteln (nur package.json - --version öffnet Cursor!)
             CURRENT_VERSION=""
@@ -642,7 +686,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
             if [ -z "$CURRENT_VERSION" ]; then
                 CURRENT_VERSION="unbekannt"
             fi
-            log_info "Aktuelle Cursor-Version: $CURRENT_VERSION"
+            log_info "$(t 'log_current_cursor_version') $CURRENT_VERSION"
             
             # Prüfe neueste verfügbare Version
             # WICHTIG: Cursor API gibt 404 zurück - nutze direkten Download von cursor.com
@@ -657,11 +701,11 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
             
             # Versuche Version aus .deb zu extrahieren NACH Download
             if [ "$CURRENT_VERSION" != "unbekannt" ]; then
-                log_info "Cursor-Version erkannt: $CURRENT_VERSION"
+                log_info "$(t 'log_cursor_version_detected') $CURRENT_VERSION"
                 
                 # NEU: Versuche Version OHNE Download zu prüfen (HTTP HEAD Request)
                 # Die API gibt einen Redirect mit Version im Dateinamen zurück
-                log_info "Prüfe verfügbare Version via HTTP HEAD..."
+                log_info "$(t 'log_checking_version_http')"
                 LOCATION_HEADER=$(curl -sI "$DOWNLOAD_URL" 2>/dev/null | grep -i "^location:" | cut -d' ' -f2- | tr -d '\r\n' || echo "")
                 
                 if [ -n "$LOCATION_HEADER" ]; then
@@ -669,39 +713,39 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                     LATEST_VERSION=$(echo "$LOCATION_HEADER" | grep -oP 'cursor_(\K[0-9.]+)' | head -1 || echo "")
 
                     if [ -n "$LATEST_VERSION" ]; then
-                        log_info "Neueste verfügbare Version (via HTTP HEAD): $LATEST_VERSION"
-
+                        log_info "$(t 'log_latest_version_http') $LATEST_VERSION"
+                        
                         # Vergleiche Versionen
                         if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
                             SKIP_INSTALL=true
-                            log_info "Cursor ist bereits auf neuester Version ($CURRENT_VERSION)"
+                            log_info "$(t 'log_cursor_already_latest') ($CURRENT_VERSION)"
                             show_cursor_update_result "$CURRENT_VERSION" "$CURRENT_VERSION"
                             show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
                         else
-                            log_info "Update verfügbar: $CURRENT_VERSION → $LATEST_VERSION"
+                            log_info "$(t 'log_update_available') $CURRENT_VERSION → $LATEST_VERSION"
                             show_cursor_update_downloading "$LATEST_VERSION"
                             # Download wird jetzt durchgeführt
-                            log_info "Lade Cursor .deb von: $DOWNLOAD_URL"
+                            log_info "$(t 'log_loading_cursor_deb_from') $DOWNLOAD_URL"
                             
                             if download_with_retry "$DOWNLOAD_URL" "$DEB_FILE"; then
                                 if [[ -f "$DEB_FILE" ]] && [[ $(stat -c%s "$DEB_FILE") -gt 50000000 ]]; then
                                     DEB_SIZE=$(du -h "$DEB_FILE" | cut -f1)
-                                    log_success "Download erfolgreich: $DEB_SIZE"
+                                    log_success "$(t 'log_download_successful') $DEB_SIZE"
                                 else
-                                    log_error "Download zu klein oder fehlgeschlagen!"
+                                    log_error "$(t 'log_download_too_small')"
                                     rm -f "$DEB_FILE"
                                     SKIP_INSTALL=true
                                     show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "❌"
                                 fi
                             else
-                                log_error "Cursor-Download fehlgeschlagen!"
+                                log_error "$(t 'log_cursor_download_failed')"
                                 rm -f "$DEB_FILE"
                                 SKIP_INSTALL=true
                                 show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "❌"
                             fi
                         fi
                     else
-                        log_warning "Version konnte nicht aus Location-Header extrahiert werden, fahre mit Download fort..."
+                        log_warning "$(t 'log_version_extract_failed')"
                         echo "⬇️  $(t 'loading_cursor_deb')"
                         
                         if download_with_retry "$DOWNLOAD_URL" "$DEB_FILE"; then
@@ -713,19 +757,19 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                                 # Extrahiere Version aus .deb (Fallback-Methode)
                                 TEMP_EXTRACT_DIR=$(mktemp -d -t cursor-version-check.XXXXXXXXXX)
                                 if ! cd "$TEMP_EXTRACT_DIR" 2>/dev/null; then
-                                    log_warning "Konnte nicht in temporäres Verzeichnis wechseln, fahre mit Installation fort..."
+                                    log_warning "$(t 'log_cannot_change_dir')"
                                     rm -rf "$TEMP_EXTRACT_DIR"
                                 elif ! ar x "$DEB_FILE" 2>/dev/null; then
                                     cd "$SCRIPT_DIR" || true
                                     rm -rf "$TEMP_EXTRACT_DIR"
-                                    log_warning "Fehler beim Extrahieren der .deb-Datei, fahre mit Installation fort..."
+                                    log_warning "$(t 'log_extract_deb_failed')"
                                 else
                                     # Finde die tar-Datei (kann .gz, .xz, .bz2 oder unkomprimiert sein)
                                     TAR_FILE=$(ls data.tar.* 2>/dev/null | head -1)
                                     if [ -z "$TAR_FILE" ]; then
                                         cd "$SCRIPT_DIR" || true
                                         rm -rf "$TEMP_EXTRACT_DIR"
-                                        log_warning "Keine data.tar.* Datei gefunden, fahre mit Installation fort..."
+                                        log_warning "$(t 'log_no_data_tar')"
                                     else
                                         # Versuche Extraktion mit verschiedenen Kompressionen
                                         EXTRACT_SUCCESS=false
@@ -757,31 +801,31 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                                                 rm -rf "$TEMP_EXTRACT_DIR"
                                                 
                                                 if [ -n "$LATEST_VERSION" ]; then
-                                                    log_info "Neueste verfügbare Version (aus .deb): $LATEST_VERSION"
+                                                    log_info "$(t 'log_latest_version_from_deb') $LATEST_VERSION"
                                                     echo "📌 $(t 'available_version') $LATEST_VERSION"
                                                     
                                                     # Vergleiche Versionen
                                                     if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
                                                         SKIP_INSTALL=true
-                                                        log_info "Cursor ist bereits auf neuester Version ($CURRENT_VERSION)"
+                                                        log_info "$(t 'log_cursor_already_latest') ($CURRENT_VERSION)"
                                                         echo "✅ $(t 'cursor_already_current') ($CURRENT_VERSION)"
                                                         rm -f "$DEB_FILE"
                                                     else
-                                                        log_info "Update verfügbar: $CURRENT_VERSION → $LATEST_VERSION"
+                                                        log_info "$(t 'log_update_available') $CURRENT_VERSION → $LATEST_VERSION"
                                                         echo "🔄 $(t 'update_available_from_to') $CURRENT_VERSION → $LATEST_VERSION"
                                                     fi
                                                 else
-                                                    log_warning "Version konnte nicht aus package.json extrahiert werden, fahre mit Installation fort..."
+                                                    log_warning "$(t 'log_version_extract_package_json_failed')"
                                                 fi
                                             else
                                                 cd "$SCRIPT_DIR" || true
                                                 rm -rf "$TEMP_EXTRACT_DIR"
-                                                log_warning "package.json nicht in .deb gefunden, fahre mit Installation fort..."
+                                                log_warning "$(t 'log_package_json_not_found')"
                                             fi
                                         else
                                             cd "$SCRIPT_DIR" || true
                                             rm -rf "$TEMP_EXTRACT_DIR"
-                                            log_warning "Fehler beim Extrahieren der tar-Datei, fahre mit Installation fort..."
+                                            log_warning "$(t 'log_extract_tar_failed')"
                                         fi
                                     fi
                                     cd "$SCRIPT_DIR" || true
@@ -800,7 +844,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                         fi
                     fi
                 else
-                    log_warning "HTTP HEAD Request fehlgeschlagen, fahre mit Download fort..."
+                    log_warning "$(t 'log_http_head_failed')"
                     echo "⬇️  $(t 'loading_cursor_deb')"
                     
                     if download_with_retry "$DOWNLOAD_URL" "$DEB_FILE"; then
@@ -896,7 +940,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                     fi
                 fi
             else
-                log_warning "Cursor-Version konnte nicht ermittelt werden, fahre mit Update fort..."
+                log_warning "$(t 'log_cursor_version_unknown')"
                 echo "⬇️  $(t 'loading_cursor_deb_simple')"
                 if ! download_with_retry "$DOWNLOAD_URL" "$DEB_FILE"; then
                     log_error "Cursor-Download fehlgeschlagen!"
@@ -919,7 +963,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
             
             # Überspringe Installation wenn bereits aktuell
             if [ "$SKIP_INSTALL" = "true" ]; then
-                log_info "Cursor-Update übersprungen (bereits aktuell)"
+                log_info "$(t 'log_cursor_update_skipped_current')"
                 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                 echo ""
             else
@@ -929,12 +973,12 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                     # Verwende -x für exact match, verhindert false positives
                     cursor_pids=$(pgrep -x "cursor" 2>/dev/null || pgrep -x "Cursor" 2>/dev/null || true)
                     if [ -n "$cursor_pids" ]; then
-                        log_warning "Cursor läuft noch (PID: $cursor_pids) - bitte manuell schließen für sauberes Update"
+                        log_warning "$(t 'log_cursor_running_pid') $cursor_pids) - $(t 'log_please_close_manually')"
                         echo "⚠️  $(t 'cursor_running') $cursor_pids)"
                         echo "   $(t 'please_close_manually')"
                         echo "   $(t 'cursor_not_auto_closed')"
                     else
-                        log_info "Keine laufenden Cursor-Prozesse gefunden"
+                        log_info "$(t 'log_no_cursor_processes')"
                         echo "ℹ️  $(t 'cursor_not_running')"
                     fi
                     
@@ -942,17 +986,17 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                     extract_dir=$(mktemp -d -t cursor-extract.XXXXXXXXXX)
                     trap 'rm -rf "$extract_dir" "$DEB_FILE"' EXIT
 
-                    log_info "Extrahiere Cursor .deb..."
+                    log_info "$(t 'log_extracting_cursor_deb')"
                     show_cursor_update_installing
                     cd "$extract_dir"
 
                     if ! ar x "$DEB_FILE" 2>&1 | tee -a "$LOG_FILE"; then
-                        log_error "Fehler beim Extrahieren des .deb-Archivs"
+                        log_error "$(t 'log_error_extracting_deb')"
                         echo "❌ Fehler beim Extrahieren!"
                         rm -rf "$extract_dir" "$DEB_FILE"
                         exit $EXIT_DOWNLOAD_ERROR
                     elif ! tar -xf data.tar.* 2>&1 | tee -a "$LOG_FILE"; then
-                        log_error "Fehler beim Extrahieren der Daten"
+                        log_error "$(t 'log_error_extracting_data')"
                         echo "❌ Fehler beim Extrahieren der Daten!"
                         rm -rf "$extract_dir" "$DEB_FILE"
                         exit $EXIT_DOWNLOAD_ERROR
@@ -961,36 +1005,36 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                         install_success=false
 
                         if [[ -d "opt/Cursor" ]]; then
-                            log_info "Installiere Cursor-Update (opt/Cursor)..."
+                            log_info "$(t 'log_installing_cursor_opt')"
                             show_cursor_update_installing
                             if sudo cp -rf opt/Cursor/* "$CURSOR_INSTALL_DIR/" 2>&1 | tee -a "$LOG_FILE"; then
                                 sudo chmod +x "$CURSOR_INSTALL_DIR/cursor" 2>/dev/null || true
-                                log_success "Cursor-Update installiert"
+                                log_success "$(t 'log_cursor_update_installed')"
                                 install_success=true
                             elif sudo cp -rf opt/Cursor/* "$(dirname "$CURSOR_INSTALL_DIR")/" 2>&1 | tee -a "$LOG_FILE"; then
                                 sudo chmod +x "$(dirname "$CURSOR_INSTALL_DIR")/cursor" 2>/dev/null || true
-                                log_success "Cursor-Update installiert (alternativer Pfad)"
+                                log_success "$(t 'log_cursor_update_installed_alt')"
                                 install_success=true
                             elif sudo cp -rf opt/Cursor /opt/ 2>&1 | tee -a "$LOG_FILE"; then
                                 sudo chmod +x /opt/Cursor/cursor 2>/dev/null || true
-                                log_success "Cursor-Update installiert (nach /opt)"
+                                log_success "$(t 'log_cursor_update_installed_opt')"
                                 install_success=true
                             fi
                         elif [[ -d "usr/share/cursor" ]]; then
-                            log_info "Installiere Cursor-Update (usr/share/cursor)..."
+                            log_info "$(t 'log_installing_cursor_usr')"
                             show_cursor_update_installing
                             if sudo cp -rf usr/share/cursor/* "$CURSOR_INSTALL_DIR/" 2>&1 | tee -a "$LOG_FILE"; then
                                 sudo chmod +x "$CURSOR_INSTALL_DIR/cursor" 2>/dev/null || true
-                                log_success "Cursor-Update installiert"
+                                log_success "$(t 'log_cursor_update_installed')"
                                 install_success=true
                             fi
                         fi
 
                         # Cleanup IMMER durchführen (trap entfernen vor cleanup)
                         trap - EXIT
-                        log_info "Bereinige temporäre Dateien..."
+                        log_info "$(t 'log_cleaning_temp_files')"
                         rm -rf "$extract_dir" "$DEB_FILE"
-                        log_info "Temporäre Dateien gelöscht"
+                        log_info "$(t 'log_temp_files_deleted')"
 
                         if [ "$install_success" = "true" ]; then
                             # Neue Version prüfen (nur package.json - --version öffnet Cursor!)
@@ -1000,11 +1044,11 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                                 NEW_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "installiert")
                             fi
                             CURSOR_UPDATED=true
-                            log_success "Cursor updated: $CURRENT_VERSION → $NEW_VERSION"
+                            log_success "$(t 'log_cursor_updated') $CURRENT_VERSION → $NEW_VERSION"
                             show_cursor_update_result "$CURRENT_VERSION" "$NEW_VERSION"
                             show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
                         else
-                            log_error "Cursor-Dateien nicht gefunden im .deb oder Installation fehlgeschlagen!"
+                            log_error "$(t 'log_cursor_files_not_found')"
                             show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "❌"
                         fi
                     fi
@@ -1025,56 +1069,99 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
     CURRENT_STEP=$((CURRENT_STEP + 1))
     show_progress $CURRENT_STEP $TOTAL_STEPS "AdGuard Home Update" "🔄"
 
-    log_info "Starte AdGuardHome-Update..."
+    log_info "$(t 'log_starting_adguard_update')"
     show_adguard_update_start
-    agh_dir="$HOME/AdGuardHome"
+    
+    # Erkenne Installationsmethode
+    ADGUARD_INSTALL_METHOD=$(detect_adguard_installation_method)
+    log_info "$(t 'log_adguard_method_detected') $ADGUARD_INSTALL_METHOD"
+    
     temp_dir=$(mktemp -d -t adguard-update.XXXXXXXXXX)
     trap 'rm -rf "$temp_dir"' EXIT
     
     if [ "$DRY_RUN" = "true" ]; then
-        if [[ -f "$agh_dir/AdGuardHome" ]]; then
-            current_version=$(cd "$agh_dir" && ./AdGuardHome --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "0.0.0")
-            log_info "[DRY-RUN] Aktuelle AdGuard-Version: v$current_version"
-            log_info "[DRY-RUN] Würde AdGuard Home aktualisieren"
-        else
-            log_warning "[DRY-RUN] AdGuard Home nicht gefunden in $agh_dir"
-        fi
-    elif [[ -f "$agh_dir/AdGuardHome" ]]; then
+        log_info "$(t 'log_dry_run_adguard_method') $ADGUARD_INSTALL_METHOD"
+        case "$ADGUARD_INSTALL_METHOD" in
+            "pacman"|"aur")
+                log_info "$(t 'log_dry_run_package_manager')"
+                ;;
+            "manual")
+                if [[ -f "$HOME/AdGuardHome/AdGuardHome" ]]; then
+                    current_version=$(cd "$HOME/AdGuardHome" && ./AdGuardHome --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "0.0.0")
+                    log_info "$(t 'log_dry_run_adguard_version') v$current_version"
+                    log_info "$(t 'log_dry_run_adguard_direct')"
+                else
+                    log_warning "$(t 'log_dry_run_adguard_not_found')"
+                fi
+                ;;
+            "not_installed")
+                log_warning "$(t 'log_dry_run_adguard_not_installed')"
+                ;;
+        esac
+    else
+        case "$ADGUARD_INSTALL_METHOD" in
+            "pacman")
+                # Über pacman installiert → wird über System-Updates verwaltet
+                ADGUARD_PACMAN_VERSION=$(pacman -Q adguard-home | awk '{print $2}')
+                log_info "$(t 'log_adguard_pacman_installed') $ADGUARD_PACMAN_VERSION)"
+                log_info "$(t 'log_adguard_update_method_pacman')"
+                echo -e "${COLOR_WARNING}  ○ $(t 'managed_by_pacman') (v$ADGUARD_PACMAN_VERSION)${COLOR_RESET}"
+                echo ""
+                log_info "AdGuard Home-Update übersprungen (wird über pacman verwaltet)"
+                show_progress $CURRENT_STEP $TOTAL_STEPS "AdGuard Home Update" "⏭️"
+                ;;
+            "aur")
+                # Über AUR installiert → wird über AUR-Updates verwaltet
+                ADGUARD_AUR_VERSION=$(pacman -Q adguard-home-bin 2>/dev/null | awk '{print $2}' || pacman -Q adguardhome 2>/dev/null | awk '{print $2}')
+                log_info "$(t 'log_adguard_aur_installed') $ADGUARD_AUR_VERSION)"
+                log_info "$(t 'log_adguard_update_method_aur')"
+                echo -e "${COLOR_WARNING}  ○ $(t 'managed_by_pacman') (v$ADGUARD_AUR_VERSION, AUR)${COLOR_RESET}"
+                echo ""
+                log_info "AdGuard Home-Update übersprungen (wird über AUR verwaltet)"
+                show_progress $CURRENT_STEP $TOTAL_STEPS "AdGuard Home Update" "⏭️"
+                ;;
+            "manual")
+                # Manuell installiert → direktes Update
+                agh_dir="$HOME/AdGuardHome"
+                log_info "$(t 'log_adguard_manual_installed')"
+                log_info "$(t 'log_adguard_update_method_manual')"
+                
+                if [[ -f "$agh_dir/AdGuardHome" ]]; then
         cd "$agh_dir"
         
-        log_info "Stoppe AdGuardHome-Service..."
-        systemctl --user stop AdGuardHome 2>&1 | tee -a "$LOG_FILE" || log_warning "AdGuardHome-Service konnte nicht gestoppt werden"
-
+        log_info "$(t 'log_stopping_adguard_service')"
+        systemctl --user stop AdGuardHome 2>&1 | tee -a "$LOG_FILE" || log_warning "$(t 'log_adguard_service_stop_failed')"
+        
         current_version=$(./AdGuardHome --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "0.0.0")
-        log_info "Aktuelle AdGuard-Version: v$current_version"
-
+        log_info "$(t 'log_current_adguard_version') v$current_version"
+        
         # Prüfe neueste Version über GitHub Releases API
-        log_info "Prüfe verfügbare AdGuard Home-Version..."
+        log_info "$(t 'log_checking_adguard_version')"
         latest_version_gh=$(curl -s "https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest" 2>/dev/null | grep -oP '"tag_name":\s*"v\K[0-9.]+' | head -1 || echo "")
 
         # Entferne 'v' Präfix falls vorhanden
         if [ -n "$latest_version_gh" ]; then
             latest_version_gh=$(echo "$latest_version_gh" | sed 's/^v//')
-            log_info "Neueste verfügbare Version (GitHub): v$latest_version_gh"
-
+            log_info "$(t 'log_latest_adguard_version') v$latest_version_gh"
+            
             # Versionsvergleich - wenn bereits aktuell, überspringe Download
             if [ "$current_version" = "$latest_version_gh" ]; then
-                log_info "AdGuardHome ist bereits auf neuester Version (v$current_version)"
+                log_info "$(t 'log_adguard_already_latest') (v$current_version)"
                 show_adguard_update_result "$current_version" "$current_version"
                 ADGUARD_UPDATED=false
                 show_progress $CURRENT_STEP $TOTAL_STEPS "AdGuard Home Update" "✅"
             else
-                log_info "Update verfügbar: v$current_version → v$latest_version_gh"
+                log_info "$(t 'log_adguard_update_available') v$current_version → v$latest_version_gh"
                 show_adguard_update_downloading "$latest_version_gh"
                 
                 backup_dir="$agh_dir-backup-$(date +%Y%m%d-%H%M%S)"
                 mkdir -p "$backup_dir"
-                cp AdGuardHome.yaml data/* "$backup_dir/" 2>/dev/null || log_warning "Backup konnte nicht erstellt werden"
-                log_info "Backup erstellt in: $backup_dir"
-
+                cp AdGuardHome.yaml data/* "$backup_dir/" 2>/dev/null || log_warning "$(t 'log_backup_failed')"
+                log_info "$(t 'log_backup_created') $backup_dir"
+                
                 # Offizieller Download-Link von AdGuard (siehe https://adguard-dns.io/kb/de/adguard-home/getting-started/)
                 download_url="https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz"
-                log_info "Lade AdGuardHome von: $download_url"
+                log_info "$(t 'log_loading_adguard_from') $download_url"
 
                 if download_with_retry "$download_url" "$temp_dir/AdGuardHome.tar.gz"; then
                     if [[ -f "$temp_dir/AdGuardHome.tar.gz" ]]; then
@@ -1085,26 +1172,26 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
                                 if [ "$new_version" != "$current_version" ]; then
                                     if cp "$new_binary" "$agh_dir/" 2>&1 | tee -a "$LOG_FILE"; then
                                         ADGUARD_UPDATED=true
-                                        log_success "AdGuardHome updated: v$current_version → v$new_version"
+                                        log_success "$(t 'adguard_updated') v$current_version → v$new_version"
                                         echo "✅ $(t 'adguard_updated') v$current_version → v$new_version"
                                     else
-                                        log_error "Fehler beim Kopieren der neuen AdGuardHome-Binary"
+                                        log_error "$(t 'log_error_copying_adguard')"
                                     fi
                                 else
-                                    log_info "AdGuardHome ist bereits aktuell (v$new_version)"
+                                    log_info "$(t 'log_adguard_already_current') (v$new_version)"
                                     echo "ℹ️ $(t 'adguard_current') (v$new_version)."
                                 fi
                             else
-                                log_error "AdGuardHome-Binary nicht im Archiv gefunden"
+                                log_error "$(t 'log_adguard_binary_not_found')"
                             fi
                         else
-                            log_error "Fehler beim Extrahieren von AdGuardHome"
+                            log_error "$(t 'log_error_extracting_adguard')"
                         fi
                     else
-                        log_error "AdGuardHome-Download fehlgeschlagen!"
+                        log_error "$(t 'log_adguard_download_failed')"
                     fi
                 else
-                    log_error "AdGuardHome-Download fehlgeschlagen!"
+                    log_error "$(t 'log_adguard_download_failed')"
                 fi
             fi
         else
@@ -1146,7 +1233,7 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
                         log_error "Fehler beim Extrahieren von AdGuardHome"
                     fi
                 else
-                    log_error "AdGuardHome-Download fehlgeschlagen!"
+                    log_error "$(t 'log_adguard_download_failed')"
                 fi
             else
                 log_error "AdGuardHome-Download fehlgeschlagen!"
@@ -1154,20 +1241,28 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
         fi
         rm -rf "$temp_dir"
 
-        log_info "Starte AdGuardHome-Service..."
+        log_info "$(t 'log_starting_adguard_service')"
         if systemctl --user start AdGuardHome 2>&1 | tee -a "$LOG_FILE"; then
             sleep 2
             if systemctl --user is-active --quiet AdGuardHome; then
-                log_success "AdGuardHome-Service läuft erfolgreich"
+                log_success "$(t 'log_adguard_service_running')"
             else
-                log_warning "AdGuardHome-Service gestartet, aber Status unklar"
+                log_warning "$(t 'log_adguard_service_status_unclear')"
             fi
         else
-            log_warning "AdGuardHome-Service konnte nicht gestartet werden"
+            log_warning "$(t 'log_adguard_service_start_failed')"
         fi
-    else
-        log_warning "AdGuardHome Binary nicht gefunden in: $agh_dir"
-        echo "⚠️ $(t 'adguard_not_found') $agh_dir"
+                else
+                    log_warning "$(t 'log_adguard_binary_not_found_path') $agh_dir"
+                    echo "⚠️ $(t 'adguard_not_found') $agh_dir"
+                fi
+                ;;
+            "not_installed")
+                log_warning "AdGuard Home nicht installiert"
+                show_component_not_found "AdGuard Home"
+                show_progress $CURRENT_STEP $TOTAL_STEPS "AdGuard Home Update" "⏭️"
+                ;;
+        esac
     fi
 else
     log_info "AdGuard Home-Update übersprungen (deaktiviert)"
@@ -1178,23 +1273,23 @@ if [ "$UPDATE_FLATPAK" = "true" ]; then
     CURRENT_STEP=$((CURRENT_STEP + 1))
     show_progress $CURRENT_STEP $TOTAL_STEPS "Flatpak-Updates" "🔄"
 
-    log_info "Starte Flatpak-Update..."
+    log_info "$(t 'log_starting_flatpak_update')"
     show_flatpak_update_start
     
     if [ "$DRY_RUN" = "true" ]; then
         if command -v flatpak >/dev/null 2>&1; then
-            log_info "[DRY-RUN] Würde ausführen: flatpak update --noninteractive -y"
+            log_info "$(t 'log_dry_run_would_execute') flatpak update --noninteractive -y"
             FLATPAK_PACKAGES=$(flatpak remote-ls --updates 2>/dev/null | wc -l || echo "0")
-            log_info "[DRY-RUN] Verfügbare Flatpak-Updates: $FLATPAK_PACKAGES Pakete"
+            log_info "$(t 'log_dry_run_available_updates') $FLATPAK_PACKAGES $(t 'packages')"
         else
-            log_warning "[DRY-RUN] Flatpak nicht gefunden"
+            log_warning "$(t 'log_dry_run_no_aur_helper')"
         fi
     else
         if command -v flatpak >/dev/null 2>&1; then
             # Prüfe verfügbare Updates
             FLATPAK_UPDATES=$(flatpak remote-ls --updates 2>/dev/null | wc -l || echo "0")
             FLATPAK_UPDATES=$(echo "$FLATPAK_UPDATES" | tr -d '\n\r' | xargs)
-            log_info "Verfügbare Flatpak-Updates: $FLATPAK_UPDATES Pakete"
+            log_info "$(t 'log_flatpak_updates_available') $FLATPAK_UPDATES $(t 'packages')"
 
 
             if [ "$FLATPAK_UPDATES" -gt 0 ] 2>/dev/null; then
@@ -1202,27 +1297,27 @@ if [ "$UPDATE_FLATPAK" = "true" ]; then
                 if flatpak update --noninteractive -y 2>&1 | grep -E "^(Installing |Updating |Removing )" | tee -a "$LOG_FILE"; then
                     FLATPAK_UPDATED=true
                     FLATPAK_PACKAGES="$FLATPAK_UPDATES"
-                    log_success "Flatpak-Update erfolgreich ($FLATPAK_UPDATES Pakete aktualisiert)"
+                    log_success "$(t 'log_flatpak_update_success') ($FLATPAK_UPDATES $(t 'log_flatpak_updates_updated'))"
                     show_flatpak_update_result "$FLATPAK_UPDATES"
                     show_progress $CURRENT_STEP $TOTAL_STEPS "Flatpak-Updates" "✅"
                 else
-                    log_warning "Flatpak-Update hatte Warnungen"
+                    log_warning "$(t 'log_flatpak_update_warnings')"
                     show_progress $CURRENT_STEP $TOTAL_STEPS "Flatpak-Updates" "⚠️"
                 fi
             else
-                log_info "Keine Flatpak-Updates verfügbar"
+                log_info "$(t 'log_no_flatpak_updates')"
                 show_flatpak_update_result 0
                 FLATPAK_PACKAGES=0
                 show_progress $CURRENT_STEP $TOTAL_STEPS "Flatpak-Updates" "✅"
             fi
         else
-            log_warning "Flatpak nicht gefunden – überspringe Flatpak-Updates."
+            log_warning "$(t 'log_flatpak_not_found')"
             show_component_not_found "Flatpak"
             show_progress $CURRENT_STEP $TOTAL_STEPS "Flatpak-Updates" "⏭️"
         fi
     fi
 else
-    log_info "Flatpak-Update übersprungen (deaktiviert)"
+    log_info "$(t 'log_flatpak_update_skipped')"
 fi
 
 # ========== Cleanup ==========
@@ -1233,59 +1328,59 @@ if [ "$DRY_RUN" = "true" ]; then
     log_info "[DRY-RUN] Würde ausführen: flatpak uninstall --unused --noninteractive -y"
     log_info "[DRY-RUN] Würde verbleibende .deb Dateien und temporäre Verzeichnisse entfernen"
 else
-    log_info "Starte System-Cleanup..."
+    log_info "$(t 'log_starting_cleanup')"
     show_cleanup_start
     
     # Alte Paketversionen im Cache behalten (nur die letzten 3 Versionen)
-    log_info "Bereinige Paket-Cache (behält letzte 3 Versionen)..."
+    log_info "$(t 'log_cleaning_package_cache')"
     paccache -rk3 2>&1 | tee -a "$LOG_FILE" || log_warning "Paccache fehlgeschlagen"
     
     # Entferne alte/deinstallierte Pakete aus dem Cache
-    log_info "Entferne alte und deinstallierte Pakete aus dem Cache..."
+    log_info "$(t 'log_removing_old_packages')"
     if yes | sudo pacman -Sc --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "Paket-Cache bereinigt"
+        log_success "$(t 'log_package_cache_cleaned')"
     else
-        log_warning "Paket-Cache-Bereinigung hatte Warnungen"
+        log_warning "$(t 'log_package_cache_warnings')"
     fi
     
     # Entferne verwaiste Pakete (Orphans)
     orphans=$(pacman -Qtdq 2>/dev/null || true)
     if [[ -n "$orphans" ]]; then
-        log_info "Entferne verwaiste Pakete..."
-        sudo pacman -Rns $orphans --noconfirm 2>&1 | tee -a "$LOG_FILE" || log_warning "Orphan-Pakete konnten nicht entfernt werden"
+        log_info "$(t 'log_removing_orphans')"
+        sudo pacman -Rns $orphans --noconfirm 2>&1 | tee -a "$LOG_FILE" || log_warning "$(t 'log_orphans_removal_failed')"
     else
-        log_info "Keine Orphan-Pakete gefunden"
+        log_info "$(t 'log_no_orphans')"
     fi
     
     # Flatpak-Cache bereinigen
     if command -v flatpak >/dev/null 2>&1; then
-        log_info "Bereinige Flatpak-Cache..."
+        log_info "$(t 'log_cleaning_flatpak_cache')"
         if flatpak uninstall --unused --noninteractive -y 2>&1 | tee -a "$LOG_FILE"; then
-            log_success "Flatpak-Cache bereinigt"
+            log_success "$(t 'log_flatpak_cache_cleaned')"
         else
-            log_warning "Flatpak-Cache-Bereinigung hatte Warnungen (oder nichts zu bereinigen)"
+            log_warning "$(t 'log_flatpak_cache_warnings')"
         fi
     fi
     
     # Entferne verbleibende Cursor .deb Dateien im Script-Verzeichnis (falls vorhanden)
     if find "$SCRIPT_DIR" -maxdepth 1 -name "cursor*.deb" -type f 2>/dev/null | grep -q .; then
-        log_info "Entferne verbleibende Cursor .deb Dateien..."
+        log_info "$(t 'log_removing_cursor_deb')"
         find "$SCRIPT_DIR" -maxdepth 1 -name "cursor*.deb" -type f -delete 2>/dev/null || true
-        log_success "Cursor .deb Dateien entfernt"
+        log_success "$(t 'log_cursor_deb_removed')"
     fi
     
     # Entferne verbleibende AdGuard temporäre Dateien
     if find /tmp -maxdepth 1 -name "*adguard*" -o -name "*AdGuard*" -type d 2>/dev/null | grep -q .; then
-        log_info "Entferne verbleibende AdGuard temporäre Dateien..."
+        log_info "$(t 'log_removing_adguard_temp')"
         find /tmp -maxdepth 1 \( -name "*adguard*" -o -name "*AdGuard*" \) -type d -exec rm -rf {} + 2>/dev/null || true
-        log_success "AdGuard temporäre Dateien entfernt"
+        log_success "$(t 'log_adguard_temp_removed')"
     fi
     
     # Entferne verbleibende Cursor temporäre Verzeichnisse
     if find /tmp -maxdepth 1 -name "*cursor*" -type d 2>/dev/null | grep -q .; then
-        log_info "Entferne verbleibende Cursor temporäre Verzeichnisse..."
+        log_info "$(t 'log_removing_cursor_temp')"
         find /tmp -maxdepth 1 -name "*cursor*" -type d -exec rm -rf {} + 2>/dev/null || true
-        log_success "Cursor temporäre Verzeichnisse entfernt"
+        log_success "$(t 'log_cursor_temp_removed')"
     fi
 
     show_cleanup_result
@@ -1302,7 +1397,7 @@ if [ "$DRY_RUN" = "true" ]; then
 else
     show_update_summary "$DURATION"
 
-    log_success "Alle Updates abgeschlossen!"
+    log_success "$(t 'log_all_updates_completed')"
 
     # Statistiken speichern
     save_stats "$DURATION" "true"
@@ -1323,7 +1418,7 @@ check_script_update() {
         return 0
     fi
     
-    log_info "Prüfe auf Script-Updates..."
+    log_info "$(t 'log_checking_script_updates')"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "🔍 $(t 'checking_script_version')"
@@ -1337,7 +1432,7 @@ check_script_update() {
     fi
     
     if [ -z "$LATEST_VERSION" ]; then
-        log_warning "Konnte neueste Version nicht abrufen"
+        log_warning "$(t 'log_could_not_fetch_version')"
         echo "⚠️  $(t 'version_check_failed')"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         return 0
@@ -1350,7 +1445,7 @@ check_script_update() {
     if [ "$LATEST_VERSION" != "$SCRIPT_VERSION" ]; then
         # Prüfe ob neue Version wirklich neuer ist (semantischer Vergleich)
         if printf '%s\n%s\n' "$SCRIPT_VERSION" "$LATEST_VERSION" | sort -V | head -1 | grep -q "^$SCRIPT_VERSION$"; then
-            log_warning "Neue Script-Version verfügbar: $SCRIPT_VERSION → $LATEST_VERSION"
+            log_warning "$(t 'log_new_script_version') $SCRIPT_VERSION → $LATEST_VERSION"
             echo -e "${COLOR_WARNING}⚠️  $(t 'new_version_available') $SCRIPT_VERSION → $LATEST_VERSION${COLOR_RESET}"
             echo ""
             
@@ -1359,14 +1454,14 @@ check_script_update() {
                 read -p "   $(t 'update_script_now') " -n 1 -r
                 echo ""
                 if [[ $REPLY =~ ^[JjYy]$ ]]; then
-                    log_info "Starte automatisches Script-Update..."
+                    log_info "$(t 'log_starting_auto_update')"
                     cd "$SCRIPT_DIR"
                     if git pull origin main 2>&1 | tee -a "$LOG_FILE"; then
-                        log_success "Script erfolgreich aktualisiert!"
+                        log_success "$(t 'log_script_updated_success')"
                         echo -e "${COLOR_SUCCESS}✅ $(t 'script_updated_successfully')${COLOR_RESET}"
                         echo "   $(t 'please_rerun_script')"
                     else
-                        log_error "Automatisches Update fehlgeschlagen!"
+                        log_error "$(t 'log_auto_update_failed')"
                         echo -e "${COLOR_ERROR}❌ $(t 'auto_update_failed')${COLOR_RESET}"
                         echo "   $(t 'please_update_manually')"
                     fi
@@ -1386,7 +1481,7 @@ check_script_update() {
             echo "ℹ️  $(t 'local_version') $SCRIPT_VERSION (GitHub: $LATEST_VERSION)"
         fi
     else
-        log_info "Script ist auf dem neuesten Stand (Version $SCRIPT_VERSION)"
+            log_info "$(t 'log_script_latest') $SCRIPT_VERSION)"
         echo "✅ $(t 'script_current') $SCRIPT_VERSION)"
     fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -1395,7 +1490,7 @@ check_script_update() {
 
 check_script_update
 
-log_info "Update-Script erfolgreich beendet"
+log_info "$(t 'log_script_update_completed')"
 
 # Terminal offen halten (auch bei Desktop-Icon)
 # WICHTIG: Bei Desktop-Icons ist Terminal oft nicht interaktiv

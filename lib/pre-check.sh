@@ -95,10 +95,11 @@ check_available_updates() {
     if [ "$UPDATE_CURSOR" = "true" ]; then
         echo -e "${COLOR_INFO}🖱️  $(t 'cursor_editor_label')${COLOR_RESET}"
         if command -v cursor >/dev/null 2>&1; then
-            # Prüfe ob über pacman/AUR installiert
-            if pacman -Q cursor 2>/dev/null | grep -q cursor || pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
+            # Prüfe ob über pacman installiert
+            if pacman -Q cursor 2>/dev/null | grep -q cursor; then
                 echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'managed_by_pacman_aur')"
             else
+                # Auch wenn über AUR installiert, prüfe auf direktes Update (kann neuer sein)
                 # Versuche aktuelle Version zu ermitteln
                 CURSOR_PATH=$(which cursor)
                 CURSOR_INSTALL_DIR=$(dirname "$(readlink -f "$CURSOR_PATH")")
@@ -117,9 +118,17 @@ check_available_updates() {
 
                     if [ -n "$LATEST_VERSION" ] && [ "$CURRENT_VERSION" != "unbekannt" ]; then
                         if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
-                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION)"
+                            if pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
+                                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert)"
+                            else
+                                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION)"
+                            fi
                         else
-                            echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $LATEST_VERSION"
+                            if pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
+                                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $LATEST_VERSION (direktes Update verfügbar)"
+                            else
+                                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $LATEST_VERSION"
+                            fi
                             updates_found=true
                             total_packages=$((total_packages + 1))
                         fi
@@ -127,7 +136,7 @@ check_available_updates() {
                         echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked')"
                     fi
                 else
-                    echo -e "   ${COLOR_WARNING}?${COLOR_RESET} Version wird beim Update geprüft"
+                    echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked')"
                 fi
             fi
         else
@@ -139,10 +148,15 @@ check_available_updates() {
     # AdGuard Home-Update prüfen
     if [ "$UPDATE_ADGUARD" = "true" ]; then
         echo -e "${COLOR_INFO}🛡️  $(t 'adguard_home_label')${COLOR_RESET}"
-        agh_dir="$HOME/AdGuardHome"
-
-        if [[ -f "$agh_dir/AdGuardHome" ]]; then
-            current_version=$(cd "$agh_dir" && ./AdGuardHome --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "0.0.0")
+        
+        # Prüfe Installationsmethode
+        if pacman -Q adguard-home 2>/dev/null | grep -q adguard-home; then
+            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'managed_by_pacman_aur')"
+        elif pacman -Q adguard-home-bin 2>/dev/null | grep -q adguard-home-bin || pacman -Q adguardhome 2>/dev/null | grep -q adguardhome; then
+            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'managed_by_pacman_aur')"
+        elif [[ -f "$HOME/AdGuardHome/AdGuardHome" ]]; then
+            # Manuell installiert → prüfe auf Updates
+            current_version=$(cd "$HOME/AdGuardHome" && ./AdGuardHome --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "0.0.0")
             latest_version=$(curl -s "https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest" 2>/dev/null | grep -oP '"tag_name":\s*"v\K[0-9.]+' | head -1 || echo "")
 
             if [ -n "$latest_version" ]; then
@@ -154,7 +168,7 @@ check_available_updates() {
                     total_packages=$((total_packages + 1))
                 fi
             else
-                echo -e "   ${COLOR_WARNING}?${COLOR_RESET} Version wird beim Update geprüft"
+                echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked')"
             fi
         else
             echo -e "   ${COLOR_WARNING}⊘${COLOR_RESET} $(t 'not_installed')"
