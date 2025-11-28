@@ -1,0 +1,68 @@
+# Log files
+logs/
+*.log
+
+# Lock files
+.update-all.lock
+*.lock
+
+# Temporary Cursor files
+cursor*.deb
+cursor-extract/
+
+# Cache directory
+.cache/
+
+# Statistics
+.stats/
+
+# Temporary AdGuard files
+/tmp/AdGuardHome-*
+/tmp/adguard-*
+
+# Temporary Cursor extraction directories
+/tmp/cursor-*
+
+# Backup directories
+*-backup-*
+
+# Error reports
+error-report-*.txt
+
+# User-specific configuration files
+config.conf
+config.local.conf
+*.local
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.bak
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# User-specific files
+*.user
+*.personal
+
+# Test files (keep test directory structure, ignore test outputs)
+test-*.log
+*.test.log
+
+# Internal developer documentation (not for end users)
+.claude/
+.cursorrules
+IMPROVEMENTS.md
+create-release.sh
+CHANGELOG.md
+
+# Test files (optional - remove if not needed)
+tests/
+
+.cursor/

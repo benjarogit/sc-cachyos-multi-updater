@@ -1,0 +1,93 @@
+#!/bin/bash
+#
+# CachyOS Multi-Updater - Summary Module
+# Module for displaying compact update summary
+#
+# Copyright (c) 2024-2025 SunnyCueq
+# Licensed under the MIT License (see LICENSE file)
+#
+# This is free and open source software (FOSS).
+# You are welcome to modify and distribute it under the terms of the MIT License.
+#
+# Repository: https://github.com/SunnyCueq/cachyos-multi-updater
+#
+
+# ========== Kompakte Update-Zusammenfassung ==========
+show_update_summary() {
+    local duration="$1"
+    local minutes=$((duration / 60))
+    local seconds=$((duration % 60))
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${COLOR_BOLD}✅ UPDATE ABGESCHLOSSEN${COLOR_RESET}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+
+    # Dauer
+    if [ $minutes -gt 0 ]; then
+        echo -e "⏱️  Dauer: ${COLOR_BOLD}${minutes}m ${seconds}s${COLOR_RESET}"
+    else
+        echo -e "⏱️  Dauer: ${COLOR_BOLD}${seconds}s${COLOR_RESET}"
+    fi
+    echo ""
+
+    # Aktualisierte Komponenten
+    local updated_count=0
+
+    if [ "$UPDATE_SYSTEM" = "true" ] && [ "$SYSTEM_UPDATED" = "true" ]; then
+        SYSTEM_PACKAGES_CLEAN=$(echo "$SYSTEM_PACKAGES" | tr -d '\n\r' | grep -oE '[0-9]+' | head -1 || echo "0")
+        if [ -n "$SYSTEM_PACKAGES_CLEAN" ] && [ "$SYSTEM_PACKAGES_CLEAN" -gt 0 ] 2>/dev/null; then
+            echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} System: $SYSTEM_PACKAGES_CLEAN Pakete"
+            updated_count=$((updated_count + 1))
+        fi
+    fi
+
+    if [ "$UPDATE_AUR" = "true" ] && [ "$AUR_UPDATED" = "true" ]; then
+        if [ -n "$AUR_PACKAGES" ] && [ "$AUR_PACKAGES" -gt 0 ] 2>/dev/null; then
+            echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} AUR: $AUR_PACKAGES Pakete"
+            updated_count=$((updated_count + 1))
+        fi
+    fi
+
+    if [ "$UPDATE_CURSOR" = "true" ] && [ "$CURSOR_UPDATED" = "true" ]; then
+        echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} Cursor aktualisiert"
+        updated_count=$((updated_count + 1))
+    fi
+
+    if [ "$UPDATE_ADGUARD" = "true" ] && [ "$ADGUARD_UPDATED" = "true" ]; then
+        echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} AdGuard Home aktualisiert"
+        updated_count=$((updated_count + 1))
+    fi
+
+    if [ "$UPDATE_FLATPAK" = "true" ] && [ "$FLATPAK_UPDATED" = "true" ]; then
+        FLATPAK_PACKAGES_CLEAN=$(echo "$FLATPAK_PACKAGES" | tr -d '\n\r' | grep -oE '[0-9]+' | head -1 || echo "0")
+        if [ -n "$FLATPAK_PACKAGES_CLEAN" ] && [ "$FLATPAK_PACKAGES_CLEAN" -gt 0 ] 2>/dev/null; then
+            echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} Flatpak: $FLATPAK_PACKAGES_CLEAN Pakete"
+            updated_count=$((updated_count + 1))
+        fi
+    fi
+
+    # Falls nichts aktualisiert wurde
+    if [ $updated_count -eq 0 ]; then
+        echo -e "${COLOR_WARNING}○${COLOR_RESET} Alle Komponenten waren bereits aktuell"
+    fi
+
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+}
+
+# ========== Dry-Run Zusammenfassung ==========
+show_dry_run_summary() {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${COLOR_WARNING}🔍 DRY-RUN ABGESCHLOSSEN${COLOR_RESET}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo -e "${COLOR_WARNING}Keine Änderungen wurden vorgenommen.${COLOR_RESET}"
+    echo "Führe das Script ohne --dry-run aus, um Updates durchzuführen."
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+}

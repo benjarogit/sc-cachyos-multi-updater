@@ -1,0 +1,46 @@
+# CachyOS Multi-Updater Konfigurationsdatei
+# Kopiere diese Datei nach config.conf und passe die Werte an
+#
+# Format: KEY=value
+# Kommentare beginnen mit #
+# Leere Zeilen werden ignoriert
+
+# ========== Update-Komponenten aktivieren/deaktivieren ==========
+# true = aktiviert, false = deaktiviert
+ENABLE_SYSTEM_UPDATE=true
+ENABLE_AUR_UPDATE=true
+ENABLE_CURSOR_UPDATE=true
+ENABLE_ADGUARD_UPDATE=true
+ENABLE_FLATPAK_UPDATE=true
+
+# ========== Logging ==========
+# Anzahl der zu behaltenden Log-Dateien (Standard: 10)
+MAX_LOG_FILES=10
+
+# ========== Benachrichtigungen ==========
+# Desktop-Benachrichtigungen aktivieren/deaktivieren
+ENABLE_NOTIFICATIONS=true
+
+# ========== Dry-Run Modus ==========
+# true = nur anzeigen was gemacht würde, keine Änderungen
+# false = normale Ausführung
+DRY_RUN=false
+
+# ========== Farbige Ausgabe ==========
+# true = farbige Terminal-Ausgabe (Standard)
+# false = keine Farben (für Logs/Redirects)
+ENABLE_COLORS=true
+
+# ========== Download-Retry ==========
+# Anzahl der Wiederholungsversuche bei fehlgeschlagenen Downloads (Standard: 3)
+DOWNLOAD_RETRIES=3
+
+# ========== Automatisches Script-Update ==========
+# true = ermöglicht automatisches Update des Scripts selbst (mit Bestätigung)
+# false = nur Hinweis auf neue Version (Standard)
+ENABLE_AUTO_UPDATE=false
+
+# ========== Cache-Einstellungen ==========
+# Cache-Dauer für Versionschecks in Sekunden (Standard: 3600 = 1 Stunde)
+CACHE_MAX_AGE=3600
+
