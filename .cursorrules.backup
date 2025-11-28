@@ -1,0 +1,152 @@
+# Cursor Rules für CachyOS Multi-Updater
+
+## Meta-Regel: Regeln aktuell halten!
+
+**WICHTIG:** Bei JEDER größeren Änderung am Projekt:
+1. Diese Datei `.cursorrules` aktualisieren
+2. Die Datei `.claude/rules.md` aktualisieren
+3. Die Datei `.claude/context.md` aktualisieren
+4. Alle drei Dateien müssen synchron bleiben!
+
+## Projekt-Kontext
+
+Ein Bash-Script für CachyOS das mit einem Klick Updates durchführt:
+- System-Pakete (pacman)
+- AUR-Pakete (yay/paru)
+- Cursor Editor
+- Flatpak-Anwendungen
+- AdGuard Home
+
+**Aktuelle Version:** 2.10.2 (STABLE RELEASE mit i18n)
+
+## Kritische Regeln
+
+### 1. Einfachheit über Komplexität
+- Halte das Script simpel und wartbar
+- Vermeide unnötige Abhängigkeiten
+- Keine überkomplexen Features
+
+### 2. Bash Best Practices
+- Verwende `set -euo pipefail` am Anfang
+- Nutze `readonly` für Konstanten
+- Nutze `local` NUR innerhalb von Funktionen (NICHT im Hauptscript!)
+- Quote alle Pfadvariablen: `"$VAR"`
+- Verwende `|| true` wenn Befehle mit set -e fehlschlagen dürfen
+- ShellCheck SC2155: Deklaration und Zuweisung trennen (`local var; var=$(cmd)`)
+- Sudo-Passwort VOR Updates: `sudo -v` (wichtig für Desktop-Icons!)
+
+### 3. Versioning (Semantic Versioning)
+- Format: `Major.Minor.Patch` (z.B. 2.10.2)
+- Version MUSS synchron sein in:
+  - `update-all.sh` (SCRIPT_VERSION)
+  - GitHub Release (Tag + Changelog)
+
+### 4. Dokumentation
+- **README:** Deutsch (`README.de.md`) UND Englisch (`README.md`)
+  - Beide müssen IMMER synchron sein
+  - Beide enthalten vollständige Dokumentation
+- **Changelog:** NUR in GitHub Releases (auf Englisch!)
+  - KEINE `CHANGELOG.md` Datei im Repo
+  - README verweist auf GitHub Releases
+- **Keine doppelte Pflege:** Changelog nur einmal (in GitHub Release)
+- **Interne Docs:** `.cursorrules` gehört NICHT ins Repo (in `.gitignore`)
+
+### 5. Testing & CI/CD
+- GitHub Actions: Immer neueste Versionen (`actions/upload-artifact@v4`)
+- ShellCheck für Linting
+- Dry-Run muss immer funktionieren
+
+### 6. Versionsprüfung für externe Tools
+- **Cursor (v2.7.7+):** HTTP HEAD Request statt vollständigem Download
+  - Version wird aus Location-Header extrahiert (`cursor_2.0.69_amd64.deb` → `2.0.69`)
+  - Download nur wenn Update verfügbar ist (132MB → wenige KB)
+  - Deutlich schneller und spart Bandbreite
+  - Fallback: Alte Methode (Download + Extraktion) wenn HTTP HEAD fehlschlägt
+  - Nutzt offiziellen Download-Link von cursor.com
+- **AdGuard Home (v2.7.6+):** Nutzt GitHub Releases API
+  - Prüft Version VOR Download
+  - Überspringt Download wenn bereits aktuell
+  - Nutzt offiziellen Download-Link von AdGuard
+  - Funktioniert perfekt seit v2.7.6
+- **Flatpak (v2.9.0+):** Nutzt `flatpak remote-ls --updates` für Versionsprüfung
+  - `flatpak list --updates` existiert NICHT - verwende `flatpak remote-ls --updates`!
+  - Verwendet `--noninteractive` Flag für vollautomatische Updates
+  - Bereinigt nicht verwendete Laufzeiten automatisch
+
+### 7. Cleanup nach Updates (v2.9.1+)
+- **WICHTIG:** Vollständige Bereinigung nach jedem Update
+- Pacman: `paccache -rk3` + `pacman -Sc --noconfirm` (alte/deinstallierte Pakete)
+- Orphan-Pakete: `pacman -Rns --noconfirm`
+- Flatpak: `flatpak uninstall --unused --noninteractive -y`
+- Cursor: Entfernt verbleibende `.deb` Dateien im Script-Verzeichnis
+- AdGuard: Entfernt temporäre Verzeichnisse in `/tmp`
+- Cursor: Entfernt temporäre Extraktions-Verzeichnisse in `/tmp`
+- **Regel:** Keine temporären Dateien dürfen nach Updates zurückbleiben!
+
+### 8. Internationalisierung (i18n) (v2.10.2+)
+- **Modul:** `lib/i18n.sh` für Übersetzungen
+- **Sprachen:** Deutsch (de) und Englisch (en, Standard)
+- **Automatisch:** Erkennt System-Sprache via `$LANG`
+- **Funktion:** `t()` für alle Benutzer-Texte
+- **Ausgabe-Module:** Alle verwenden `t()` für Übersetzungen
+- **Fallback:** Englisch bei nicht unterstützten Sprachen
+- **WICHTIG:** Alle neuen Benutzer-Texte MÜSSEN übersetzt werden!
+  - Deutsch UND Englisch in `lib/i18n.sh` hinzufügen
+  - Niemals hartcodierte Texte in Ausgabe-Modulen!
+
+## Wichtige Dateien
+
+- `setup.sh` - Setup-Script für Erstinstallation
+- `update-all.sh` - Hauptscript
+- `create-desktop-shortcut.sh` - Helper-Script für Desktop-Verknüpfungen
+- `run-update.sh` - Wrapper-Script für Desktop-Integration
+- `lib/` - Module:
+  - `i18n.sh` - Internationalisierung (v2.10.2+)
+  - `output.sh` - Ausgabe-Funktionen (nutzt i18n)
+  - `statistics.sh` - Update-Statistiken
+  - `progress.sh` - Fortschrittsanzeige
+  - `interactive.sh` - Interaktiver Modus
+  - `summary.sh` - Zusammenfassung
+  - `pre-check.sh` - Update-Prüfung
+- `README.md` - Dokumentation (Englisch)
+- `README.de.md` - Dokumentation (Deutsch)
+- `config.conf.example` - Beispiel-Config
+- `.github/workflows/` - CI/CD
+
+## Beim Bearbeiten
+
+### update-all.sh
+- Lock-File prüfen/erstellen
+- Error Handling hinzufügen
+- Logging verwenden (log_info, log_error)
+- Kein `local` außerhalb von Funktionen!
+
+### Version erhöhen
+1. `update-all.sh` → SCRIPT_VERSION anpassen
+2. `README.md` + `README.de.md` → Ggf. Feature-Liste aktualisieren (BEIDE!)
+3. GitHub Release erstellen mit Changelog (auf Englisch!)
+
+### Release erstellen
+**WICHTIG:** Releases NUR erstellen wenn User explizit sagt "Erstelle Release"!
+User muss bestätigen dass alles funktioniert!
+
+1. Committen + pushen
+2. GitHub Release erstellen: `gh release create vX.Y.Z --title "..." --notes "..."`
+   - **Changelog IMMER auf Englisch!**
+   - Tag wird automatisch erstellt
+   - Vollständiger Changelog im Release
+3. Prüfen: Lokal und Remote synchron?
+
+## Features die wir NICHT wollen
+
+- Zu viele externe Dependencies
+- Überkomplexe Modularisierung
+- Pre/Post Hooks (zu komplex)
+- Zu ausführliche Unit-Tests (BATS Basics reichen)
+- Lock-Files (verursachen Probleme in CI/CD)
+
+## Wichtige Pfade
+
+- Installation: `/mnt/ssd2/Backup (SSD2)/Tools/CachyOS MultiUpdater/`
+- Desktop-Icon: `~/Schreibtisch/update-all.desktop`
+- GitHub: `benjarogit/sc-cachyos-multi-updater`

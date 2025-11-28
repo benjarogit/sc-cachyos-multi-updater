@@ -645,11 +645,38 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                 show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
                 ;;
             "aur")
-                # Über AUR installiert → prüfe auf direktes Update (kann neuer sein als AUR)
+                # Über AUR installiert → über AUR updaten
                 CURSOR_AUR_VERSION=$(pacman -Q cursor-bin | awk '{print $2}')
                 log_info "$(t 'log_cursor_aur_installed') $CURSOR_AUR_VERSION)"
-                log_info "$(t 'log_update_method_direct')"
-                # Fahre mit Update-Prüfung fort
+                log_info "$(t 'log_update_method_aur')"
+                
+                # Update über AUR
+                if command -v yay >/dev/null 2>&1; then
+                    log_info "$(t 'log_using_yay')"
+                    if yay -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
+                        CURSOR_UPDATED=true
+                        log_success "$(t 'log_cursor_updated_via_aur')"
+                        show_cursor_update_result "$CURSOR_AUR_VERSION" "updated"
+                        show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
+                    else
+                        log_error "$(t 'log_cursor_aur_update_failed')"
+                        show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "❌"
+                    fi
+                elif command -v paru >/dev/null 2>&1; then
+                    log_info "$(t 'log_using_paru')"
+                    if paru -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
+                        CURSOR_UPDATED=true
+                        log_success "$(t 'log_cursor_updated_via_aur')"
+                        show_cursor_update_result "$CURSOR_AUR_VERSION" "updated"
+                        show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
+                    else
+                        log_error "$(t 'log_cursor_aur_update_failed')"
+                        show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "❌"
+                    fi
+                else
+                    log_warning "$(t 'log_no_aur_helper_found')"
+                    show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
+                fi
                 ;;
             "manual")
                 # Manuell installiert → direktes Update
@@ -659,8 +686,8 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                 ;;
         esac
         
-        # Wenn nicht über pacman installiert, fahre mit Update-Prüfung fort
-        if [ "$CURSOR_INSTALL_METHOD" != "pacman" ]; then
+        # Wenn manuell installiert, fahre mit direktem Update fort
+        if [ "$CURSOR_INSTALL_METHOD" = "manual" ]; then
             # Cursor-Pfad finden
             CURSOR_PATH=$(which cursor)
             CURSOR_INSTALL_DIR=$(dirname "$(readlink -f "$CURSOR_PATH")")
