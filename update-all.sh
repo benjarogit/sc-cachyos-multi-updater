@@ -577,6 +577,27 @@ else
     log_info "$(t 'log_aur_update_skipped')"
 fi
 
+# ========== Versionsvergleichsfunktion ==========
+# Vergleicht zwei semantische Versionen (z.B. "2.0.77" vs "2.1.39")
+# Gibt zurück: "newer", "older", oder "equal"
+compare_versions() {
+    local version1="$1"
+    local version2="$2"
+    
+    # Entferne Build-Nummern (z.B. "2.1.39-1" -> "2.1.39")
+    version1=$(echo "$version1" | sed 's/-.*$//')
+    version2=$(echo "$version2" | sed 's/-.*$//')
+    
+    # Verwende sort -V für semantischen Versionsvergleich
+    if [ "$version1" = "$version2" ]; then
+        echo "equal"
+    elif printf '%s\n%s\n' "$version1" "$version2" | sort -V | head -1 | grep -q "^$version1$"; then
+        echo "older"
+    else
+        echo "newer"
+    fi
+}
+
 # ========== Installationsmethode-Erkennung ==========
 detect_cursor_installation_method() {
     # Gibt zurück: "pacman", "aur", oder "manual"
@@ -645,36 +666,49 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
             show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
                 ;;
             "aur")
-                # Über AUR installiert → prüfe auf AUR-Update
-                CURSOR_AUR_VERSION=$(pacman -Q cursor-bin | awk '{print $2}')
-                log_info "$(t 'log_cursor_aur_installed') $CURSOR_AUR_VERSION)"
+                # Über AUR installiert → prüfe ob installierte Version aktuell ist
+                CURSOR_AUR_VERSION_FULL=$(pacman -Q cursor-bin | awk '{print $2}')
+                # Extrahiere Version ohne Build-Nummer (2.1.39-1 -> 2.1.39)
+                CURSOR_AUR_VERSION=$(echo "$CURSOR_AUR_VERSION_FULL" | sed 's/-.*$//')
+                log_info "$(t 'log_cursor_aur_installed') $CURSOR_AUR_VERSION_FULL)"
                 log_info "$(t 'log_update_method_aur')"
                 
-                # Prüfe ob AUR-Update verfügbar ist
-                AUR_UPDATE_AVAILABLE=false
-                if command -v yay >/dev/null 2>&1; then
-                    log_info "$(t 'log_checking_aur_updates')"
-                    # Prüfe ob cursor-bin in der Update-Liste ist
-                    if yay -Qua 2>/dev/null | grep -q "^cursor-bin"; then
-                        AUR_UPDATE_AVAILABLE=true
-                    fi
-                elif command -v paru >/dev/null 2>&1; then
-                    log_info "$(t 'log_checking_aur_updates')"
-                    # Prüfe ob cursor-bin in der Update-Liste ist
-                    if paru -Qua 2>/dev/null | grep -q "^cursor-bin"; then
-                        AUR_UPDATE_AVAILABLE=true
-                    fi
+                # Ermittle installierte Version aus package.json
+                CURSOR_PATH=$(which cursor)
+                CURSOR_INSTALL_DIR=$(dirname "$(readlink -f "$CURSOR_PATH")")
+                INSTALLED_VERSION=""
+                if [ -f "$CURSOR_INSTALL_DIR/resources/app/package.json" ]; then
+                    INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "")
+                fi
+                if [ -z "$INSTALLED_VERSION" ]; then
+                    for alt_path in "/opt/Cursor/resources/app/package.json" "/usr/share/cursor/resources/app/package.json" "$HOME/.local/share/cursor/resources/app/package.json"; do
+                        if [ -f "$alt_path" ]; then
+                            INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$alt_path" 2>/dev/null | head -1 || echo "")
+                            [ -n "$INSTALLED_VERSION" ] && break
+                        fi
+                    done
                 fi
                 
-                if [ "$AUR_UPDATE_AVAILABLE" = "true" ]; then
-                    log_info "$(t 'log_aur_update_available')"
+                if [ -z "$INSTALLED_VERSION" ]; then
+                    log_warning "$(t 'log_cursor_version_not_detectable')"
+                    INSTALLED_VERSION="0.0.0"
+                fi
+                
+                log_info "$(t 'log_installed_cursor_version') $INSTALLED_VERSION"
+                log_info "$(t 'log_aur_cursor_version') $CURSOR_AUR_VERSION"
+                
+                # Vergleiche installierte Version mit AUR-Version
+                VERSION_COMPARE=$(compare_versions "$INSTALLED_VERSION" "$CURSOR_AUR_VERSION")
+                
+                if [ "$VERSION_COMPARE" = "older" ]; then
+                    log_info "$(t 'log_cursor_update_needed') $INSTALLED_VERSION -> $CURSOR_AUR_VERSION"
                     # Update über AUR
                     if command -v yay >/dev/null 2>&1; then
                         log_info "$(t 'log_using_yay')"
                         if yay -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
                             CURSOR_UPDATED=true
                             log_success "$(t 'log_cursor_updated_via_aur')"
-                            show_cursor_update_result "$CURSOR_AUR_VERSION" "updated"
+                            show_cursor_update_result "$INSTALLED_VERSION" "$CURSOR_AUR_VERSION"
                             show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
                         else
                             log_error "$(t 'log_cursor_aur_update_failed')"
@@ -685,7 +719,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                         if paru -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
                             CURSOR_UPDATED=true
                             log_success "$(t 'log_cursor_updated_via_aur')"
-                            show_cursor_update_result "$CURSOR_AUR_VERSION" "updated"
+                            show_cursor_update_result "$INSTALLED_VERSION" "$CURSOR_AUR_VERSION"
                             show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
                         else
                             log_error "$(t 'log_cursor_aur_update_failed')"
@@ -697,7 +731,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                     fi
                 else
                     log_info "$(t 'log_cursor_already_latest_aur')"
-                    show_cursor_already_latest "$CURSOR_AUR_VERSION"
+                    show_cursor_update_result "$INSTALLED_VERSION" "$INSTALLED_VERSION"
                     show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
                 fi
                 ;;
