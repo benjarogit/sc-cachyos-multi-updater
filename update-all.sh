@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # ========== Version ==========
-readonly SCRIPT_VERSION="1.0.2"
+readonly SCRIPT_VERSION="1.0.3"
 readonly GITHUB_REPO="SunnyCueq/cachyos-multi-updater"
 
 # ========== Exit-Codes ==========
@@ -447,6 +447,52 @@ cleanup_old_logs
 # System-Info sammeln
 collect_system_info
 
+# ========== System-Erkennung ==========
+# Prüfe ob es eine Arch-basierte Distribution ist
+check_arch_based() {
+    if [ -f /etc/os-release ]; then
+        local id=$(grep "^ID=" /etc/os-release | cut -d'=' -f2 | tr -d '"' || echo "")
+        local id_like=$(grep "^ID_LIKE=" /etc/os-release | cut -d'=' -f2 | tr -d '"' || echo "")
+        
+        # Liste bekannter Arch-basierter Distributionen
+        case "$id" in
+            arch|archlinux|cachyos|manjaro|endeavouros|arcolinux|artix|garuda|rebornos|parabola)
+                return 0
+                ;;
+        esac
+        
+        # Prüfe ID_LIKE für Arch-basierte Distributionen
+        case "$id_like" in
+            *arch*)
+                return 0
+                ;;
+        esac
+        
+        # Wenn weder ID noch ID_LIKE Arch enthält, aber pacman vorhanden ist
+        if command -v pacman >/dev/null 2>&1; then
+            log_warning "$(t 'log_non_arch_detected') (ID: $id, ID_LIKE: $id_like)"
+            log_warning "$(t 'log_pacman_found_continuing')"
+            return 0
+        fi
+        
+        return 1
+    else
+        # Fallback: Prüfe ob pacman vorhanden ist
+        if command -v pacman >/dev/null 2>&1; then
+            log_warning "$(t 'log_os_release_not_found')"
+            log_warning "$(t 'log_pacman_found_continuing')"
+            return 0
+        fi
+        return 1
+    fi
+}
+
+# Prüfe System (nur Warnung, kein Abbruch)
+if ! check_arch_based; then
+    log_warning "$(t 'log_non_arch_system')"
+    log_warning "$(t 'log_script_may_not_work')"
+fi
+
 log_info "$(t 'log_version') $SCRIPT_VERSION"
 log_info "$(t 'log_update_started')"
 log_info "$(t 'log_file') $LOG_FILE"
@@ -491,7 +537,7 @@ echo -e "${COLOR_BOLD}🚀 $(t 'update_process_starts')${COLOR_RESET}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# ========== CachyOS updaten ==========
+# ========== System-Updates (pacman) ==========
 if [ "$UPDATE_SYSTEM" = "true" ]; then
     CURRENT_STEP=$((CURRENT_STEP + 1))
     show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'system_updates')" "🔄"
@@ -674,19 +720,22 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                 log_info "$(t 'log_update_method_aur')"
                 
                 # Ermittle installierte Version aus package.json
-                CURSOR_PATH=$(which cursor)
-                CURSOR_INSTALL_DIR=$(dirname "$(readlink -f "$CURSOR_PATH")")
+                # Bei AUR-Installation ist package.json in /usr/share/cursor/resources/app/package.json
+                # Priorität: AUR-Pfad zuerst, dann andere Pfade
                 INSTALLED_VERSION=""
-                if [ -f "$CURSOR_INSTALL_DIR/resources/app/package.json" ]; then
-                    INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "")
-                fi
+                for alt_path in "/usr/share/cursor/resources/app/package.json" "/opt/Cursor/resources/app/package.json" "/opt/cursor/resources/app/package.json" "$HOME/.local/share/cursor/resources/app/package.json"; do
+                    if [ -f "$alt_path" ]; then
+                        INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$alt_path" 2>/dev/null | head -1 || echo "")
+                        [ -n "$INSTALLED_VERSION" ] && break
+                    fi
+                done
+                # Fallback: Versuche über CURSOR_PATH
                 if [ -z "$INSTALLED_VERSION" ]; then
-                    for alt_path in "/opt/Cursor/resources/app/package.json" "/usr/share/cursor/resources/app/package.json" "$HOME/.local/share/cursor/resources/app/package.json"; do
-                        if [ -f "$alt_path" ]; then
-                            INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$alt_path" 2>/dev/null | head -1 || echo "")
-                            [ -n "$INSTALLED_VERSION" ] && break
-                        fi
-                    done
+                    CURSOR_PATH=$(which cursor)
+                    CURSOR_INSTALL_DIR=$(dirname "$(readlink -f "$CURSOR_PATH")")
+                    if [ -f "$CURSOR_INSTALL_DIR/resources/app/package.json" ]; then
+                        INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "")
+                    fi
                 fi
                 
                 if [ -z "$INSTALLED_VERSION" ]; then
@@ -738,18 +787,21 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                             CURSOR_UPDATED=true
                             log_success "$(t 'log_cursor_updated_via_aur')"
                             # Nach Update: Neue Version aus package.json lesen
+                            # Bei AUR-Installation ist package.json in /usr/share/cursor/resources/app/package.json
                             sleep 1
                             NEW_INSTALLED_VERSION=""
-                            if [ -f "$CURSOR_INSTALL_DIR/resources/app/package.json" ]; then
-                                NEW_INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "")
-                            fi
-                            if [ -z "$NEW_INSTALLED_VERSION" ]; then
-                                for alt_path in "/opt/Cursor/resources/app/package.json" "/usr/share/cursor/resources/app/package.json" "$HOME/.local/share/cursor/resources/app/package.json"; do
-                                    if [ -f "$alt_path" ]; then
-                                        NEW_INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$alt_path" 2>/dev/null | head -1 || echo "")
-                                        [ -n "$NEW_INSTALLED_VERSION" ] && break
-                                    fi
-                                done
+                            # Priorität: AUR-Pfad zuerst, dann andere Pfade
+                            for alt_path in "/usr/share/cursor/resources/app/package.json" "/opt/Cursor/resources/app/package.json" "/opt/cursor/resources/app/package.json" "$HOME/.local/share/cursor/resources/app/package.json"; do
+                                if [ -f "$alt_path" ]; then
+                                    NEW_INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$alt_path" 2>/dev/null | head -1 || echo "")
+                                    [ -n "$NEW_INSTALLED_VERSION" ] && break
+                                fi
+                            done
+                            # Fallback: Versuche über CURSOR_INSTALL_DIR
+                            if [ -z "$NEW_INSTALLED_VERSION" ] && [ -n "$CURSOR_INSTALL_DIR" ]; then
+                                if [ -f "$CURSOR_INSTALL_DIR/resources/app/package.json" ]; then
+                                    NEW_INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "")
+                                fi
                             fi
                             if [ -z "$NEW_INSTALLED_VERSION" ]; then
                                 NEW_INSTALLED_VERSION="$CURSOR_AUR_VERSION"
