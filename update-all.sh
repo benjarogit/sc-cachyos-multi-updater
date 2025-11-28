@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # ========== Version ==========
-readonly SCRIPT_VERSION="1.0.1"
+readonly SCRIPT_VERSION="1.0.2"
 readonly GITHUB_REPO="SunnyCueq/cachyos-multi-updater"
 
 # ========== Exit-Codes ==========
@@ -708,7 +708,25 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                         if yay -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
                             CURSOR_UPDATED=true
                             log_success "$(t 'log_cursor_updated_via_aur')"
-                            show_cursor_update_result "$INSTALLED_VERSION" "$CURSOR_AUR_VERSION"
+                            # Nach Update: Neue Version aus package.json lesen
+                            sleep 1
+                            NEW_INSTALLED_VERSION=""
+                            if [ -f "$CURSOR_INSTALL_DIR/resources/app/package.json" ]; then
+                                NEW_INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "")
+                            fi
+                            if [ -z "$NEW_INSTALLED_VERSION" ]; then
+                                for alt_path in "/opt/Cursor/resources/app/package.json" "/usr/share/cursor/resources/app/package.json" "$HOME/.local/share/cursor/resources/app/package.json"; do
+                                    if [ -f "$alt_path" ]; then
+                                        NEW_INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$alt_path" 2>/dev/null | head -1 || echo "")
+                                        [ -n "$NEW_INSTALLED_VERSION" ] && break
+                                    fi
+                                done
+                            fi
+                            if [ -z "$NEW_INSTALLED_VERSION" ]; then
+                                NEW_INSTALLED_VERSION="$CURSOR_AUR_VERSION"
+                            fi
+                            log_info "$(t 'log_installed_cursor_version') $NEW_INSTALLED_VERSION"
+                            show_cursor_update_result "$INSTALLED_VERSION" "$NEW_INSTALLED_VERSION"
                             show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
                         else
                             log_error "$(t 'log_cursor_aur_update_failed')"
@@ -719,7 +737,25 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                         if paru -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
                             CURSOR_UPDATED=true
                             log_success "$(t 'log_cursor_updated_via_aur')"
-                            show_cursor_update_result "$INSTALLED_VERSION" "$CURSOR_AUR_VERSION"
+                            # Nach Update: Neue Version aus package.json lesen
+                            sleep 1
+                            NEW_INSTALLED_VERSION=""
+                            if [ -f "$CURSOR_INSTALL_DIR/resources/app/package.json" ]; then
+                                NEW_INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "")
+                            fi
+                            if [ -z "$NEW_INSTALLED_VERSION" ]; then
+                                for alt_path in "/opt/Cursor/resources/app/package.json" "/usr/share/cursor/resources/app/package.json" "$HOME/.local/share/cursor/resources/app/package.json"; do
+                                    if [ -f "$alt_path" ]; then
+                                        NEW_INSTALLED_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$alt_path" 2>/dev/null | head -1 || echo "")
+                                        [ -n "$NEW_INSTALLED_VERSION" ] && break
+                                    fi
+                                done
+                            fi
+                            if [ -z "$NEW_INSTALLED_VERSION" ]; then
+                                NEW_INSTALLED_VERSION="$CURSOR_AUR_VERSION"
+                            fi
+                            log_info "$(t 'log_installed_cursor_version') $NEW_INSTALLED_VERSION"
+                            show_cursor_update_result "$INSTALLED_VERSION" "$NEW_INSTALLED_VERSION"
                             show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
                         else
                             log_error "$(t 'log_cursor_aur_update_failed')"

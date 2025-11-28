@@ -99,8 +99,8 @@ check_available_updates() {
             if pacman -Q cursor 2>/dev/null | grep -q cursor; then
                 echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'managed_by_pacman_aur')"
             else
-                # Auch wenn über AUR installiert, prüfe auf direktes Update (kann neuer sein)
-                # Versuche aktuelle Version zu ermitteln
+                # Über AUR installiert → prüfe AUR-Version vs. installierte Version
+                # Versuche aktuelle installierte Version zu ermitteln
                 CURSOR_PATH=$(which cursor)
                 CURSOR_INSTALL_DIR=$(dirname "$(readlink -f "$CURSOR_PATH")")
                 CURRENT_VERSION="unbekannt"
@@ -108,32 +108,40 @@ check_available_updates() {
                 if [ -f "$CURSOR_INSTALL_DIR/resources/app/package.json" ]; then
                     CURRENT_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "unbekannt")
                 fi
+                # Fallback: Prüfe alternative Pfade
+                if [ "$CURRENT_VERSION" = "unbekannt" ]; then
+                    for alt_path in "/opt/Cursor/resources/app/package.json" "/usr/share/cursor/resources/app/package.json" "$HOME/.local/share/cursor/resources/app/package.json"; do
+                        if [ -f "$alt_path" ]; then
+                            CURRENT_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$alt_path" 2>/dev/null | head -1 || echo "unbekannt")
+                            [ "$CURRENT_VERSION" != "unbekannt" ] && break
+                        fi
+                    done
+                fi
 
-                # Prüfe verfügbare Version via HTTP HEAD
-                DOWNLOAD_URL="https://api2.cursor.sh/updates/download/golden/linux-x64-deb/cursor/2.0"
-                LOCATION_HEADER=$(curl -sI "$DOWNLOAD_URL" 2>/dev/null | grep -i "^location:" | cut -d' ' -f2- | tr -d '\r\n' || echo "")
-
-                if [ -n "$LOCATION_HEADER" ]; then
-                    LATEST_VERSION=$(echo "$LOCATION_HEADER" | grep -oP 'cursor_(\K[0-9.]+)' | head -1 || echo "")
-
-                    if [ -n "$LATEST_VERSION" ] && [ "$CURRENT_VERSION" != "unbekannt" ]; then
-                        if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
-                            if pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
-                                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert)"
-                            else
-                                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION)"
-                            fi
+                # Prüfe AUR-Version
+                if pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
+                    CURSOR_AUR_VERSION_FULL=$(pacman -Q cursor-bin | awk '{print $2}')
+                    CURSOR_AUR_VERSION=$(echo "$CURSOR_AUR_VERSION_FULL" | sed 's/-.*$//')
+                    
+                    if [ "$CURRENT_VERSION" != "unbekannt" ]; then
+                        # Vergleiche installierte Version mit AUR-Version (semantischer Vergleich)
+                        # Verwende sort -V für semantischen Versionsvergleich
+                        if [ "$CURRENT_VERSION" = "$CURSOR_AUR_VERSION" ]; then
+                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert)"
                         else
-                            if pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
-                                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $LATEST_VERSION (direktes Update verfügbar)"
+                            # Prüfe ob installierte Version älter ist
+                            if printf '%s\n%s\n' "$CURRENT_VERSION" "$CURSOR_AUR_VERSION" | sort -V | head -1 | grep -q "^$CURRENT_VERSION$"; then
+                                # CURRENT_VERSION ist älter
+                                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $CURSOR_AUR_VERSION (AUR-Update verfügbar)"
+                                updates_found=true
+                                total_packages=$((total_packages + 1))
                             else
-                                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $LATEST_VERSION"
+                                # CURRENT_VERSION ist neuer (sollte nicht passieren, aber sicherheitshalber)
+                                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert, AUR: v$CURSOR_AUR_VERSION)"
                             fi
-                            updates_found=true
-                            total_packages=$((total_packages + 1))
                         fi
                     else
-                        echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked')"
+                        echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked') (AUR: v$CURSOR_AUR_VERSION)"
                     fi
                 else
                     echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked')"
