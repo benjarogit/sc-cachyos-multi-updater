@@ -637,45 +637,68 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
         case "$CURSOR_INSTALL_METHOD" in
             "pacman")
                 # Über pacman installiert → wird über System-Updates verwaltet
-                CURSOR_PACMAN_VERSION=$(pacman -Q cursor | awk '{print $2}')
-                log_info "Cursor ist über pacman installiert (Version: $CURSOR_PACMAN_VERSION)"
+            CURSOR_PACMAN_VERSION=$(pacman -Q cursor | awk '{print $2}')
+            log_info "Cursor ist über pacman installiert (Version: $CURSOR_PACMAN_VERSION)"
                 log_info "Update-Methode: Wird über System-Updates (pacman -Syu) verwaltet"
-                show_cursor_pacman_managed "$CURSOR_PACMAN_VERSION"
-                log_info "Cursor-Update übersprungen (wird über pacman verwaltet)"
-                show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
+            show_cursor_pacman_managed "$CURSOR_PACMAN_VERSION"
+            log_info "Cursor-Update übersprungen (wird über pacman verwaltet)"
+            show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
                 ;;
             "aur")
-                # Über AUR installiert → über AUR updaten
+                # Über AUR installiert → prüfe auf AUR-Update
                 CURSOR_AUR_VERSION=$(pacman -Q cursor-bin | awk '{print $2}')
                 log_info "$(t 'log_cursor_aur_installed') $CURSOR_AUR_VERSION)"
                 log_info "$(t 'log_update_method_aur')"
                 
-                # Update über AUR
+                # Prüfe ob AUR-Update verfügbar ist
+                AUR_UPDATE_AVAILABLE=false
                 if command -v yay >/dev/null 2>&1; then
-                    log_info "$(t 'log_using_yay')"
-                    if yay -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
-                        CURSOR_UPDATED=true
-                        log_success "$(t 'log_cursor_updated_via_aur')"
-                        show_cursor_update_result "$CURSOR_AUR_VERSION" "updated"
-                        show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
-                    else
-                        log_error "$(t 'log_cursor_aur_update_failed')"
-                        show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "❌"
+                    log_info "$(t 'log_checking_aur_updates')"
+                    # Prüfe ob cursor-bin in der Update-Liste ist
+                    if yay -Qua 2>/dev/null | grep -q "^cursor-bin"; then
+                        AUR_UPDATE_AVAILABLE=true
                     fi
                 elif command -v paru >/dev/null 2>&1; then
-                    log_info "$(t 'log_using_paru')"
-                    if paru -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
-                        CURSOR_UPDATED=true
-                        log_success "$(t 'log_cursor_updated_via_aur')"
-                        show_cursor_update_result "$CURSOR_AUR_VERSION" "updated"
-                        show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
+                    log_info "$(t 'log_checking_aur_updates')"
+                    # Prüfe ob cursor-bin in der Update-Liste ist
+                    if paru -Qua 2>/dev/null | grep -q "^cursor-bin"; then
+                        AUR_UPDATE_AVAILABLE=true
+                    fi
+                fi
+                
+                if [ "$AUR_UPDATE_AVAILABLE" = "true" ]; then
+                    log_info "$(t 'log_aur_update_available')"
+                    # Update über AUR
+                    if command -v yay >/dev/null 2>&1; then
+                        log_info "$(t 'log_using_yay')"
+                        if yay -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
+                            CURSOR_UPDATED=true
+                            log_success "$(t 'log_cursor_updated_via_aur')"
+                            show_cursor_update_result "$CURSOR_AUR_VERSION" "updated"
+                            show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
+                        else
+                            log_error "$(t 'log_cursor_aur_update_failed')"
+                            show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "❌"
+                        fi
+                    elif command -v paru >/dev/null 2>&1; then
+                        log_info "$(t 'log_using_paru')"
+                        if paru -S cursor-bin --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
+                            CURSOR_UPDATED=true
+                            log_success "$(t 'log_cursor_updated_via_aur')"
+                            show_cursor_update_result "$CURSOR_AUR_VERSION" "updated"
+                            show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
+                        else
+                            log_error "$(t 'log_cursor_aur_update_failed')"
+                            show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "❌"
+                        fi
                     else
-                        log_error "$(t 'log_cursor_aur_update_failed')"
-                        show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "❌"
+                        log_warning "$(t 'log_no_aur_helper_found')"
+                        show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
                     fi
                 else
-                    log_warning "$(t 'log_no_aur_helper_found')"
-                    show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
+                    log_info "$(t 'log_cursor_already_latest_aur')"
+                    show_cursor_already_latest "$CURSOR_AUR_VERSION"
+                    show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "✅"
                 fi
                 ;;
             "manual")
@@ -741,7 +764,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
 
                     if [ -n "$LATEST_VERSION" ]; then
                         log_info "$(t 'log_latest_version_http') $LATEST_VERSION"
-                        
+
                         # Vergleiche Versionen
                         if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
                             SKIP_INSTALL=true
@@ -1158,10 +1181,10 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
         
         log_info "$(t 'log_stopping_adguard_service')"
         systemctl --user stop AdGuardHome 2>&1 | tee -a "$LOG_FILE" || log_warning "$(t 'log_adguard_service_stop_failed')"
-        
+
         current_version=$(./AdGuardHome --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "0.0.0")
         log_info "$(t 'log_current_adguard_version') v$current_version"
-        
+
         # Prüfe neueste Version über GitHub Releases API
         log_info "$(t 'log_checking_adguard_version')"
         latest_version_gh=$(curl -s "https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest" 2>/dev/null | grep -oP '"tag_name":\s*"v\K[0-9.]+' | head -1 || echo "")
@@ -1170,7 +1193,7 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
         if [ -n "$latest_version_gh" ]; then
             latest_version_gh=$(echo "$latest_version_gh" | sed 's/^v//')
             log_info "$(t 'log_latest_adguard_version') v$latest_version_gh"
-            
+
             # Versionsvergleich - wenn bereits aktuell, überspringe Download
             if [ "$current_version" = "$latest_version_gh" ]; then
                 log_info "$(t 'log_adguard_already_latest') (v$current_version)"
@@ -1185,7 +1208,7 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
                 mkdir -p "$backup_dir"
                 cp AdGuardHome.yaml data/* "$backup_dir/" 2>/dev/null || log_warning "$(t 'log_backup_failed')"
                 log_info "$(t 'log_backup_created') $backup_dir"
-                
+
                 # Offizieller Download-Link von AdGuard (siehe https://adguard-dns.io/kb/de/adguard-home/getting-started/)
                 download_url="https://static.adguard.com/adguardhome/release/AdGuardHome_linux_amd64.tar.gz"
                 log_info "$(t 'log_loading_adguard_from') $download_url"
@@ -1279,7 +1302,7 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
         else
             log_warning "$(t 'log_adguard_service_start_failed')"
         fi
-                else
+    else
                     log_warning "$(t 'log_adguard_binary_not_found_path') $agh_dir"
                     echo "⚠️ $(t 'adguard_not_found') $agh_dir"
                 fi

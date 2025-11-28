@@ -61,7 +61,7 @@ source "$LANG_FILE"
 # Verwendung: t "key"
 t() {
     local key="$1"
-    
+
     # Verwende das entsprechende Array basierend auf der erkannten Sprache
     case "$DETECTED_LANG" in
         de)
