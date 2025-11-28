@@ -16,65 +16,65 @@
 interactive_mode() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${COLOR_BOLD}🎮 INTERAKTIVER MODUS${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}🎮 $(t 'interactive_mode')${COLOR_RESET}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "Welche Komponenten möchtest du aktualisieren?"
+    echo "$(t 'which_components_update')"
     echo ""
 
     # System-Updates
-    read -p "  [1] System (pacman)?        (J/n): " -n 1 REPLY_SYSTEM
+    read -p "  [1] $(t 'system_pacman')        (J/n): " -n 1 REPLY_SYSTEM
     echo ""
     if [[ ! "$REPLY_SYSTEM" =~ ^[Nn]$ ]]; then
         UPDATE_SYSTEM=true
-        echo -e "      ${COLOR_SUCCESS}✅ System-Updates aktiviert${COLOR_RESET}"
+        echo -e "      ${COLOR_SUCCESS}✅ $(t 'system_updates') $(t 'enabled')${COLOR_RESET}"
     else
         UPDATE_SYSTEM=false
-        echo -e "      ${COLOR_WARNING}⏭️  System-Updates übersprungen${COLOR_RESET}"
+        echo -e "      ${COLOR_WARNING}⏭️  $(t 'system_updates') $(t 'skipped')${COLOR_RESET}"
     fi
 
     # AUR-Updates
-    read -p "  [2] AUR (yay/paru)?         (J/n): " -n 1 REPLY_AUR
+    read -p "  [2] $(t 'aur_yay_paru')         (J/n): " -n 1 REPLY_AUR
     echo ""
     if [[ ! "$REPLY_AUR" =~ ^[Nn]$ ]]; then
         UPDATE_AUR=true
-        echo -e "      ${COLOR_SUCCESS}✅ AUR-Updates aktiviert${COLOR_RESET}"
+        echo -e "      ${COLOR_SUCCESS}✅ $(t 'aur_updates') $(t 'enabled')${COLOR_RESET}"
     else
         UPDATE_AUR=false
-        echo -e "      ${COLOR_WARNING}⏭️  AUR-Updates übersprungen${COLOR_RESET}"
+        echo -e "      ${COLOR_WARNING}⏭️  $(t 'aur_updates') $(t 'skipped')${COLOR_RESET}"
     fi
 
     # Cursor
-    read -p "  [3] Cursor Editor?          (J/n): " -n 1 REPLY_CURSOR
+    read -p "  [3] $(t 'cursor_editor')          (J/n): " -n 1 REPLY_CURSOR
     echo ""
     if [[ ! "$REPLY_CURSOR" =~ ^[Nn]$ ]]; then
         UPDATE_CURSOR=true
-        echo -e "      ${COLOR_SUCCESS}✅ Cursor-Update aktiviert${COLOR_RESET}"
+        echo -e "      ${COLOR_SUCCESS}✅ $(t 'cursor_editor_update') $(t 'enabled')${COLOR_RESET}"
     else
         UPDATE_CURSOR=false
-        echo -e "      ${COLOR_WARNING}⏭️  Cursor-Update übersprungen${COLOR_RESET}"
+        echo -e "      ${COLOR_WARNING}⏭️  $(t 'cursor_editor_update') $(t 'skipped')${COLOR_RESET}"
     fi
 
     # AdGuard Home
-    read -p "  [4] AdGuard Home?           (J/n): " -n 1 REPLY_ADGUARD
+    read -p "  [4] $(t 'adguard_home')           (J/n): " -n 1 REPLY_ADGUARD
     echo ""
     if [[ ! "$REPLY_ADGUARD" =~ ^[Nn]$ ]]; then
         UPDATE_ADGUARD=true
-        echo -e "      ${COLOR_SUCCESS}✅ AdGuard Home-Update aktiviert${COLOR_RESET}"
+        echo -e "      ${COLOR_SUCCESS}✅ $(t 'adguard_home_update') $(t 'enabled')${COLOR_RESET}"
     else
         UPDATE_ADGUARD=false
-        echo -e "      ${COLOR_WARNING}⏭️  AdGuard Home-Update übersprungen${COLOR_RESET}"
+        echo -e "      ${COLOR_WARNING}⏭️  $(t 'adguard_home_update') $(t 'skipped')${COLOR_RESET}"
     fi
 
     # Flatpak
-    read -p "  [5] Flatpak?                (J/n): " -n 1 REPLY_FLATPAK
+    read -p "  [5] $(t 'flatpak')                (J/n): " -n 1 REPLY_FLATPAK
     echo ""
     if [[ ! "$REPLY_FLATPAK" =~ ^[Nn]$ ]]; then
         UPDATE_FLATPAK=true
-        echo -e "      ${COLOR_SUCCESS}✅ Flatpak-Updates aktiviert${COLOR_RESET}"
+        echo -e "      ${COLOR_SUCCESS}✅ $(t 'flatpak_updates') $(t 'enabled')${COLOR_RESET}"
     else
         UPDATE_FLATPAK=false
-        echo -e "      ${COLOR_WARNING}⏭️  Flatpak-Updates übersprungen${COLOR_RESET}"
+        echo -e "      ${COLOR_WARNING}⏭️  $(t 'flatpak_updates') $(t 'skipped')${COLOR_RESET}"
     fi
 
     echo ""
@@ -82,19 +82,19 @@ interactive_mode() {
     echo ""
 
     # Bestätigung
-    echo "Ausgewählte Updates:"
-    [ "$UPDATE_SYSTEM" = "true" ] && echo "  ✅ System-Updates"
-    [ "$UPDATE_AUR" = "true" ] && echo "  ✅ AUR-Updates"
-    [ "$UPDATE_CURSOR" = "true" ] && echo "  ✅ Cursor-Update"
-    [ "$UPDATE_ADGUARD" = "true" ] && echo "  ✅ AdGuard Home-Update"
-    [ "$UPDATE_FLATPAK" = "true" ] && echo "  ✅ Flatpak-Updates"
+    echo "$(t 'selected_updates')"
+    [ "$UPDATE_SYSTEM" = "true" ] && echo "  ✅ $(t 'system_updates')"
+    [ "$UPDATE_AUR" = "true" ] && echo "  ✅ $(t 'aur_updates')"
+    [ "$UPDATE_CURSOR" = "true" ] && echo "  ✅ $(t 'cursor_editor_update')"
+    [ "$UPDATE_ADGUARD" = "true" ] && echo "  ✅ $(t 'adguard_home_update')"
+    [ "$UPDATE_FLATPAK" = "true" ] && echo "  ✅ $(t 'flatpak_updates')"
 
     echo ""
-    read -p "Fortfahren? (J/n): " -n 1 REPLY_CONTINUE
+    read -p "$(t 'continue_question') " -n 1 REPLY_CONTINUE
     echo ""
 
     if [[ "$REPLY_CONTINUE" =~ ^[Nn]$ ]]; then
-        echo "Abgebrochen."
+        echo "$(t 'cancelled')"
         exit 0
     fi
 

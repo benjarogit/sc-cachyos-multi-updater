@@ -16,7 +16,7 @@
 check_available_updates() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${COLOR_BOLD}🔍 VERFÜGBARE UPDATES WERDEN GEPRÜFT...${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}🔍 $(t 'checking_updates')${COLOR_RESET}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
@@ -25,7 +25,7 @@ check_available_updates() {
 
     # System-Updates prüfen
     if [ "$UPDATE_SYSTEM" = "true" ]; then
-        echo -e "${COLOR_INFO}📦 System (pacman)...${COLOR_RESET}"
+        echo -e "${COLOR_INFO}📦 $(t 'system_pacman_label')${COLOR_RESET}"
         
         # Verwende checkupdates für korrekte Paketanzahl
         # checkupdates gibt Exit-Code 2 zurück wenn keine Updates verfügbar sind
@@ -39,18 +39,18 @@ check_available_updates() {
         fi
 
         if [ "$system_count" -gt 0 ] 2>/dev/null; then
-            echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $system_count $([ "$system_count" -eq 1 ] && echo "Paket" || echo "Pakete") verfügbar"
+            echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $system_count $([ "$system_count" -eq 1 ] && echo "$(t 'package')" || echo "$(t 'packages')") $(t 'available')"
             updates_found=true
             total_packages=$((total_packages + system_count))
         else
-            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} Bereits aktuell"
+            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current')"
         fi
         echo ""
     fi
 
     # AUR-Updates prüfen
     if [ "$UPDATE_AUR" = "true" ]; then
-        echo -e "${COLOR_INFO}🔧 AUR (yay/paru)...${COLOR_RESET}"
+        echo -e "${COLOR_INFO}🔧 $(t 'aur_yay_paru_label')${COLOR_RESET}"
         if command -v yay >/dev/null 2>&1; then
             local aur_updates
             aur_updates=$(yay -Qua 2>/dev/null || true)
@@ -62,11 +62,11 @@ check_available_updates() {
             fi
 
             if [ "$aur_count" -gt 0 ] 2>/dev/null; then
-                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $aur_count $([ "$aur_count" -eq 1 ] && echo "Paket" || echo "Pakete") verfügbar"
+                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $aur_count $([ "$aur_count" -eq 1 ] && echo "$(t 'package')" || echo "$(t 'packages')") $(t 'available')"
                 updates_found=true
                 total_packages=$((total_packages + aur_count))
             else
-                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} Bereits aktuell"
+                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current')"
             fi
         elif command -v paru >/dev/null 2>&1; then
             local aur_updates
@@ -79,25 +79,25 @@ check_available_updates() {
             fi
 
             if [ "$aur_count" -gt 0 ] 2>/dev/null; then
-                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $aur_count $([ "$aur_count" -eq 1 ] && echo "Paket" || echo "Pakete") verfügbar"
+                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $aur_count $([ "$aur_count" -eq 1 ] && echo "$(t 'package')" || echo "$(t 'packages')") $(t 'available')"
                 updates_found=true
                 total_packages=$((total_packages + aur_count))
             else
-                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} Bereits aktuell"
+                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current')"
             fi
         else
-            echo -e "   ${COLOR_WARNING}⊘${COLOR_RESET} Nicht installiert"
+            echo -e "   ${COLOR_WARNING}⊘${COLOR_RESET} $(t 'not_installed')"
         fi
         echo ""
     fi
 
     # Cursor-Update prüfen
     if [ "$UPDATE_CURSOR" = "true" ]; then
-        echo -e "${COLOR_INFO}🖱️  Cursor Editor...${COLOR_RESET}"
+        echo -e "${COLOR_INFO}🖱️  $(t 'cursor_editor_label')${COLOR_RESET}"
         if command -v cursor >/dev/null 2>&1; then
             # Prüfe ob über pacman/AUR installiert
             if pacman -Q cursor 2>/dev/null | grep -q cursor || pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
-                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} Über pacman/AUR verwaltet (System-/AUR-Updates)"
+                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'managed_by_pacman_aur')"
             else
                 # Versuche aktuelle Version zu ermitteln
                 CURSOR_PATH=$(which cursor)
@@ -117,28 +117,28 @@ check_available_updates() {
 
                     if [ -n "$LATEST_VERSION" ] && [ "$CURRENT_VERSION" != "unbekannt" ]; then
                         if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
-                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} Bereits aktuell (v$CURRENT_VERSION)"
+                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION)"
                         else
-                            echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} Update verfügbar: $CURRENT_VERSION → $LATEST_VERSION"
+                            echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $LATEST_VERSION"
                             updates_found=true
                             total_packages=$((total_packages + 1))
                         fi
                     else
-                        echo -e "   ${COLOR_WARNING}?${COLOR_RESET} Version wird beim Update geprüft"
+                        echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked')"
                     fi
                 else
                     echo -e "   ${COLOR_WARNING}?${COLOR_RESET} Version wird beim Update geprüft"
                 fi
             fi
         else
-            echo -e "   ${COLOR_WARNING}⊘${COLOR_RESET} Nicht installiert"
+            echo -e "   ${COLOR_WARNING}⊘${COLOR_RESET} $(t 'not_installed')"
         fi
         echo ""
     fi
 
     # AdGuard Home-Update prüfen
     if [ "$UPDATE_ADGUARD" = "true" ]; then
-        echo -e "${COLOR_INFO}🛡️  AdGuard Home...${COLOR_RESET}"
+        echo -e "${COLOR_INFO}🛡️  $(t 'adguard_home_label')${COLOR_RESET}"
         agh_dir="$HOME/AdGuardHome"
 
         if [[ -f "$agh_dir/AdGuardHome" ]]; then
@@ -147,9 +147,9 @@ check_available_updates() {
 
             if [ -n "$latest_version" ]; then
                 if [ "$current_version" = "$latest_version" ]; then
-                    echo -e "   ${COLOR_WARNING}○${COLOR_RESET} Bereits aktuell (v$current_version)"
+                    echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$current_version)"
                 else
-                    echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} Update verfügbar: v$current_version → v$latest_version"
+                    echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') v$current_version → v$latest_version"
                     updates_found=true
                     total_packages=$((total_packages + 1))
                 fi
@@ -157,14 +157,14 @@ check_available_updates() {
                 echo -e "   ${COLOR_WARNING}?${COLOR_RESET} Version wird beim Update geprüft"
             fi
         else
-            echo -e "   ${COLOR_WARNING}⊘${COLOR_RESET} Nicht installiert"
+            echo -e "   ${COLOR_WARNING}⊘${COLOR_RESET} $(t 'not_installed')"
         fi
         echo ""
     fi
 
     # Flatpak-Updates prüfen
     if [ "$UPDATE_FLATPAK" = "true" ]; then
-        echo -e "${COLOR_INFO}📦 Flatpak...${COLOR_RESET}"
+        echo -e "${COLOR_INFO}📦 $(t 'flatpak_label')${COLOR_RESET}"
         if command -v flatpak >/dev/null 2>&1; then
             local flatpak_updates
             flatpak_updates=$(flatpak remote-ls --updates 2>/dev/null || true)
@@ -176,14 +176,14 @@ check_available_updates() {
             fi
 
             if [ "$flatpak_count" -gt 0 ] 2>/dev/null; then
-                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $flatpak_count $([ "$flatpak_count" -eq 1 ] && echo "Paket" || echo "Pakete") verfügbar"
+                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $flatpak_count $([ "$flatpak_count" -eq 1 ] && echo "$(t 'package')" || echo "$(t 'packages')") $(t 'available')"
                 updates_found=true
                 total_packages=$((total_packages + flatpak_count))
             else
-                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} Bereits aktuell"
+                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current')"
             fi
         else
-            echo -e "   ${COLOR_WARNING}⊘${COLOR_RESET} Nicht installiert"
+            echo -e "   ${COLOR_WARNING}⊘${COLOR_RESET} $(t 'not_installed')"
         fi
         echo ""
     fi
@@ -195,9 +195,9 @@ check_available_updates() {
         if [ "$total_packages" -gt 0 ]; then
             local package_text
             if [ "$total_packages" -eq 1 ]; then
-                package_text="Paket"
+                package_text=$(t 'package')
             else
-                package_text="Pakete"
+                package_text=$(t 'packages')
             fi
             echo -e "${COLOR_SUCCESS}✓ $(t 'updates_found'): $total_packages $package_text${COLOR_RESET}"
         else

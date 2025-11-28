@@ -74,13 +74,13 @@ validate_config_value() {
     case "$key" in
         DRY_RUN|ENABLE_NOTIFICATIONS|ENABLE_COLORS|ENABLE_AUTO_UPDATE)
             if [[ ! "$value" =~ ^(true|false)$ ]]; then
-                echo "WARNUNG: Ungültiger Wert für $key: '$value' (erwartet: true/false)" >&2
+                echo "$(t 'config_invalid_value') $key: '$value' $(t 'config_expected') true/false)" >&2
                 return 1
             fi
             ;;
         MAX_LOG_FILES|DOWNLOAD_RETRIES)
             if [[ ! "$value" =~ ^[0-9]+$ ]]; then
-                echo "WARNUNG: Ungültiger Wert für $key: '$value' (erwartet: Zahl)" >&2
+                echo "$(t 'config_invalid_value') $key: '$value' $(t 'config_expected') number)" >&2
                 return 1
             fi
             ;;
@@ -105,7 +105,7 @@ load_config() {
 
             # Validiere Wert
             if ! validate_config_value "$key" "$value"; then
-                echo "  in Zeile $line_num von $CONFIG_FILE" >&2
+                echo "  $(t 'config_in_line') $line_num $(t 'config_of') $CONFIG_FILE" >&2
                 continue
             fi
 
@@ -174,7 +174,7 @@ log_warning() {
 
 # ========== Module laden ==========
 if [ ! -f "$SCRIPT_DIR/lib/statistics.sh" ]; then
-    echo "Fehler: statistics.sh nicht gefunden in $SCRIPT_DIR/lib/" >&2
+    echo "$(t 'error_file_not_found') statistics.sh $(t 'error_not_found_in') $SCRIPT_DIR/lib/" >&2
     exit 1
 fi
 source "$SCRIPT_DIR/lib/i18n.sh"
@@ -239,32 +239,32 @@ parse_args() {
                 exit 0
                 ;;
             --help|-h)
-                echo "CachyOS Multi-Updater"
-                echo "Version: $SCRIPT_VERSION"
+                echo "$(t 'app_name')"
+                echo "$(t 'version_label') $SCRIPT_VERSION"
                 echo ""
-                echo "Verwendung: $0 [OPTIONEN]"
+                echo "$(t 'usage') $0 [OPTIONEN]"
                 echo ""
-                echo "Optionen:"
-                echo "  --only-system        Nur System-Updates (CachyOS)"
-                echo "  --only-aur           Nur AUR-Updates"
-                echo "  --only-cursor        Nur Cursor-Update"
-                echo "  --only-adguard       Nur AdGuard Home-Update"
-                echo "  --only-flatpak       Nur Flatpak-Updates"
-                echo "  --dry-run            Zeigt was gemacht würde, ohne Änderungen"
-                echo "  --interactive, -i    Interaktiver Modus (wähle Updates aus)"
-                echo "  --stats              Zeige Update-Statistiken"
-                echo "  --version, -v        Zeigt die Versionsnummer"
-                echo "  --help, -h           Zeigt diese Hilfe"
+                echo "$(t 'options')"
+                echo "  --only-system        $(t 'only_system')"
+                echo "  --only-aur           $(t 'only_aur')"
+                echo "  --only-cursor        $(t 'only_cursor')"
+                echo "  --only-adguard       $(t 'only_adguard')"
+                echo "  --only-flatpak       $(t 'only_flatpak')"
+                echo "  --dry-run            $(t 'dry_run_desc')"
+                echo "  --interactive, -i    $(t 'interactive_desc')"
+                echo "  --stats              $(t 'stats_desc')"
+                echo "  --version, -v        $(t 'version_desc')"
+                echo "  --help, -h           $(t 'help_desc')"
                 echo ""
                 exit 0
                 ;;
             --version|-v)
-                echo "CachyOS Multi-Updater Version $SCRIPT_VERSION"
+                echo "$(t 'app_name') $(t 'version_label') $SCRIPT_VERSION"
                 exit 0
                 ;;
             *)
-                echo "❌ Unbekannte Option: $1"
-                echo "Verwende --help für Hilfe"
+                echo "❌ $(t 'unknown_option') $1"
+                echo "$(t 'use_help')"
                 exit 1
                 ;;
         esac
@@ -280,14 +280,14 @@ fi
 
 # ========== Dry-Run Anzeige ==========
 if [ "$DRY_RUN" = "true" ]; then
-    echo "🔍 DRY-RUN MODUS: Es werden keine Änderungen vorgenommen!"
+    echo "🔍 $(t 'dry_run_mode')"
     echo ""
-    echo "Geplante Updates:"
-    [ "$UPDATE_SYSTEM" = "true" ] && echo "  ✅ System-Updates (CachyOS)"
-    [ "$UPDATE_AUR" = "true" ] && echo "  ✅ AUR-Updates"
-    [ "$UPDATE_CURSOR" = "true" ] && echo "  ✅ Cursor-Update"
-    [ "$UPDATE_ADGUARD" = "true" ] && echo "  ✅ AdGuard Home-Update"
-    [ "$UPDATE_FLATPAK" = "true" ] && echo "  ✅ Flatpak-Updates"
+    echo "$(t 'planned_updates')"
+    [ "$UPDATE_SYSTEM" = "true" ] && echo "  ✅ $(t 'system_updates')"
+    [ "$UPDATE_AUR" = "true" ] && echo "  ✅ $(t 'aur_updates')"
+    [ "$UPDATE_CURSOR" = "true" ] && echo "  ✅ $(t 'cursor_editor_update')"
+    [ "$UPDATE_ADGUARD" = "true" ] && echo "  ✅ $(t 'adguard_home_update')"
+    [ "$UPDATE_FLATPAK" = "true" ] && echo "  ✅ $(t 'flatpak_updates')"
     echo ""
 fi
 
@@ -313,14 +313,14 @@ check_update_frequency() {
         log_warning "Letztes Update vor $days_ago Tagen! Regelmäßige Updates (wöchentlich) empfohlen."
         echo ""
         echo "⚠️  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "   WARNUNG: Letztes Update vor $days_ago Tagen!"
-        echo "   Regelmäßige Updates sind wichtig für Sicherheit und Stabilität."
-        echo "   Empfehlung: Updates wöchentlich durchführen"
+        echo "   $(t 'warning_last_update') $days_ago $(t 'days')!"
+        echo "   $(t 'regular_updates_important')"
+        echo "   $(t 'recommendation_weekly')"
         echo "   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
     elif [ $days_ago -gt 7 ]; then
         log_info "Letztes Update vor $days_ago Tagen"
-        echo "ℹ️  Letztes Update vor $days_ago Tagen"
+        echo "ℹ️  $(t 'last_update_days_ago') $days_ago $(t 'days')"
     fi
 }
 
@@ -332,46 +332,46 @@ generate_error_report() {
 
     {
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "FEHLER-REPORT: CachyOS Multi-Updater"
+        echo "$(t 'error_report_title')"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "Fehlertyp:      $error_type"
-        echo "Datum:          $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "Script Version: $SCRIPT_VERSION"
+        echo "$(t 'error_type')      $error_type"
+        echo "$(t 'date_label')          $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "$(t 'script_version_label') $SCRIPT_VERSION"
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "SYSTEM INFORMATION"
+        echo "$(t 'system_information')"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "OS:        $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || echo "Unbekannt")"
-        echo "Kernel:    $(uname -r)"
-        echo "User:      $(whoami)"
-        echo "Hostname:  $(hostname)"
-        echo "Disk:      $(df -h / 2>/dev/null | awk 'NR==2 {print $4 " free / " $2 " total"}' || echo "N/A")"
-        echo "Memory:    $(free -h 2>/dev/null | awk 'NR==2 {print $7 " available / " $2 " total"}' || echo "N/A")"
+        echo "$(t 'os_label')        $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || echo "$(t 'unknown')")"
+        echo "$(t 'kernel_label')    $(uname -r)"
+        echo "$(t 'user_label')      $(whoami)"
+        echo "$(t 'hostname_label')  $(hostname)"
+        echo "$(t 'disk_label')      $(df -h / 2>/dev/null | awk 'NR==2 {print $4 " free / " $2 " total"}' || echo "N/A")"
+        echo "$(t 'memory_label')    $(free -h 2>/dev/null | awk 'NR==2 {print $7 " available / " $2 " total"}' || echo "N/A")"
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "LETZTE 50 LOG-ZEILEN"
+        echo "$(t 'last_50_log_lines')"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        tail -50 "$LOG_FILE" 2>/dev/null || echo "Log-Datei nicht verfügbar"
+        tail -50 "$LOG_FILE" 2>/dev/null || echo "$(t 'log_file_not_available')"
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "KONFIGURATION"
+        echo "$(t 'configuration')"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         if [ -f "$CONFIG_FILE" ]; then
             cat "$CONFIG_FILE"
         else
-            echo "Keine Config-Datei vorhanden (Standard-Einstellungen)"
+            echo "$(t 'no_config_file')"
         fi
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "ENDE FEHLER-REPORT"
+        echo "$(t 'end_error_report')"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     } > "$error_file"
 
     log_error "Fehler-Report erstellt: $error_file"
     echo ""
-    echo "❌ Ein Fehler ist aufgetreten!"
-    echo "   Fehler-Report erstellt: $error_file"
-    echo "   Bitte prüfe den Report für Details."
+    echo "❌ $(t 'error_occurred')"
+    echo "   $(t 'error_report_created') $error_file"
+    echo "   $(t 'please_check_report')"
     echo ""
 }
 
@@ -381,7 +381,7 @@ collect_system_info() {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SYSTEM INFORMATION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OS:             $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || echo "Unbekannt")
+OS:             $(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || echo "$(t 'unknown')")
 Kernel:         $(uname -r)
 Script Version: $SCRIPT_VERSION
 Datum:          $(date '+%Y-%m-%d %H:%M:%S')
@@ -461,7 +461,7 @@ estimate_duration
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo -e "${COLOR_BOLD}CachyOS Multi-Updater v$SCRIPT_VERSION${COLOR_RESET}"
+echo -e "${COLOR_BOLD}$(t 'app_name') v$SCRIPT_VERSION${COLOR_RESET}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
@@ -702,13 +702,13 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                         fi
                     else
                         log_warning "Version konnte nicht aus Location-Header extrahiert werden, fahre mit Download fort..."
-                        echo "⬇️  Lade Cursor .deb für Versionsprüfung..."
+                        echo "⬇️  $(t 'loading_cursor_deb')"
                         
                         if download_with_retry "$DOWNLOAD_URL" "$DEB_FILE"; then
                             if [[ -f "$DEB_FILE" ]] && [[ $(stat -c%s "$DEB_FILE") -gt 50000000 ]]; then
                                 DEB_SIZE=$(du -h "$DEB_FILE" | cut -f1)
                                 log_success "Download erfolgreich: $DEB_SIZE"
-                                echo "✅ Download erfolgreich: $DEB_SIZE"
+                                echo "✅ $(t 'download_successful') $DEB_SIZE"
                                 
                                 # Extrahiere Version aus .deb (Fallback-Methode)
                                 TEMP_EXTRACT_DIR=$(mktemp -d -t cursor-version-check.XXXXXXXXXX)
@@ -758,17 +758,17 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                                                 
                                                 if [ -n "$LATEST_VERSION" ]; then
                                                     log_info "Neueste verfügbare Version (aus .deb): $LATEST_VERSION"
-                                                    echo "📌 Verfügbare Version: $LATEST_VERSION"
+                                                    echo "📌 $(t 'available_version') $LATEST_VERSION"
                                                     
                                                     # Vergleiche Versionen
                                                     if [ "$CURRENT_VERSION" = "$LATEST_VERSION" ]; then
                                                         SKIP_INSTALL=true
                                                         log_info "Cursor ist bereits auf neuester Version ($CURRENT_VERSION)"
-                                                        echo "✅ Cursor ist bereits aktuell ($CURRENT_VERSION)"
+                                                        echo "✅ $(t 'cursor_already_current') ($CURRENT_VERSION)"
                                                         rm -f "$DEB_FILE"
                                                     else
                                                         log_info "Update verfügbar: $CURRENT_VERSION → $LATEST_VERSION"
-                                                        echo "🔄 Update verfügbar: $CURRENT_VERSION → $LATEST_VERSION"
+                                                        echo "🔄 $(t 'update_available_from_to') $CURRENT_VERSION → $LATEST_VERSION"
                                                     fi
                                                 else
                                                     log_warning "Version konnte nicht aus package.json extrahiert werden, fahre mit Installation fort..."
@@ -788,7 +788,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                                 fi
                             else
                                 log_error "Download zu klein oder fehlgeschlagen!"
-                                echo "❌ Download fehlgeschlagen!"
+                                echo "❌ $(t 'download_failed')"
                                 rm -f "$DEB_FILE"
                                 SKIP_INSTALL=true
                             fi
@@ -801,7 +801,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                     fi
                 else
                     log_warning "HTTP HEAD Request fehlgeschlagen, fahre mit Download fort..."
-                    echo "⬇️  Lade Cursor .deb für Versionsprüfung..."
+                    echo "⬇️  $(t 'loading_cursor_deb')"
                     
                     if download_with_retry "$DOWNLOAD_URL" "$DEB_FILE"; then
                         if [[ -f "$DEB_FILE" ]] && [[ $(stat -c%s "$DEB_FILE") -gt 50000000 ]]; then
@@ -897,7 +897,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                 fi
             else
                 log_warning "Cursor-Version konnte nicht ermittelt werden, fahre mit Update fort..."
-                echo "⬇️  Lade Cursor .deb..."
+                echo "⬇️  $(t 'loading_cursor_deb_simple')"
                 if ! download_with_retry "$DOWNLOAD_URL" "$DEB_FILE"; then
                     log_error "Cursor-Download fehlgeschlagen!"
                     echo "❌ Download fehlgeschlagen!"
@@ -930,12 +930,12 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                     cursor_pids=$(pgrep -x "cursor" 2>/dev/null || pgrep -x "Cursor" 2>/dev/null || true)
                     if [ -n "$cursor_pids" ]; then
                         log_warning "Cursor läuft noch (PID: $cursor_pids) - bitte manuell schließen für sauberes Update"
-                        echo "⚠️  Cursor läuft noch (PID: $cursor_pids)"
-                        echo "   Bitte manuell schließen für sauberes Update"
-                        echo "   (Cursor wird nicht automatisch geschlossen)"
+                        echo "⚠️  $(t 'cursor_running') $cursor_pids)"
+                        echo "   $(t 'please_close_manually')"
+                        echo "   $(t 'cursor_not_auto_closed')"
                     else
                         log_info "Keine laufenden Cursor-Prozesse gefunden"
-                        echo "ℹ️  Cursor läuft nicht"
+                        echo "ℹ️  $(t 'cursor_not_running')"
                     fi
                     
                     # Extrahiere .deb
@@ -1012,7 +1012,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                     cd "$SCRIPT_DIR" || true
                 else
                     log_error "Download zu klein oder fehlgeschlagen!"
-                    echo "❌ Download zu klein oder fehlgeschlagen!"
+                    echo "❌ $(t 'download_too_small')"
                     rm -f "$DEB_FILE"
                 fi
             fi
@@ -1086,13 +1086,13 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
                                     if cp "$new_binary" "$agh_dir/" 2>&1 | tee -a "$LOG_FILE"; then
                                         ADGUARD_UPDATED=true
                                         log_success "AdGuardHome updated: v$current_version → v$new_version"
-                                        echo "✅ AdGuardHome updated: v$current_version → v$new_version"
+                                        echo "✅ $(t 'adguard_updated') v$current_version → v$new_version"
                                     else
                                         log_error "Fehler beim Kopieren der neuen AdGuardHome-Binary"
                                     fi
                                 else
                                     log_info "AdGuardHome ist bereits aktuell (v$new_version)"
-                                    echo "ℹ️ AdGuardHome ist aktuell (v$new_version)."
+                                    echo "ℹ️ $(t 'adguard_current') (v$new_version)."
                                 fi
                             else
                                 log_error "AdGuardHome-Binary nicht im Archiv gefunden"
@@ -1167,7 +1167,7 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
         fi
     else
         log_warning "AdGuardHome Binary nicht gefunden in: $agh_dir"
-        echo "⚠️ AdGuardHome Binary nicht gefunden in: $agh_dir"
+        echo "⚠️ $(t 'adguard_not_found') $agh_dir"
     fi
 else
     log_info "AdGuard Home-Update übersprungen (deaktiviert)"
@@ -1326,7 +1326,7 @@ check_script_update() {
     log_info "Prüfe auf Script-Updates..."
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "🔍 Script-Version prüfen..."
+    echo "🔍 $(t 'checking_script_version')"
     
     # Versuche zuerst Releases, dann Tags
     LATEST_VERSION=$(curl -s "https://api.github.com/repos/$GITHUB_REPO/releases/latest" 2>/dev/null | grep -oP '"tag_name":\s*"v?\K[0-9.]+' | head -1 || echo "")
@@ -1338,7 +1338,7 @@ check_script_update() {
     
     if [ -z "$LATEST_VERSION" ]; then
         log_warning "Konnte neueste Version nicht abrufen"
-        echo "⚠️  Versionsprüfung fehlgeschlagen (keine Internetverbindung?)"
+        echo "⚠️  $(t 'version_check_failed')"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         return 0
     fi
@@ -1351,43 +1351,43 @@ check_script_update() {
         # Prüfe ob neue Version wirklich neuer ist (semantischer Vergleich)
         if printf '%s\n%s\n' "$SCRIPT_VERSION" "$LATEST_VERSION" | sort -V | head -1 | grep -q "^$SCRIPT_VERSION$"; then
             log_warning "Neue Script-Version verfügbar: $SCRIPT_VERSION → $LATEST_VERSION"
-            echo -e "${COLOR_WARNING}⚠️  Neue Script-Version verfügbar: $SCRIPT_VERSION → $LATEST_VERSION${COLOR_RESET}"
+            echo -e "${COLOR_WARNING}⚠️  $(t 'new_version_available') $SCRIPT_VERSION → $LATEST_VERSION${COLOR_RESET}"
             echo ""
             
             if [ "$ENABLE_AUTO_UPDATE" = "true" ]; then
-                echo "   Automatisches Update ist aktiviert."
-                read -p "   Script jetzt aktualisieren? (j/N): " -n 1 -r
+                echo "   $(t 'auto_update_enabled')"
+                read -p "   $(t 'update_script_now') " -n 1 -r
                 echo ""
                 if [[ $REPLY =~ ^[JjYy]$ ]]; then
                     log_info "Starte automatisches Script-Update..."
                     cd "$SCRIPT_DIR"
                     if git pull origin main 2>&1 | tee -a "$LOG_FILE"; then
                         log_success "Script erfolgreich aktualisiert!"
-                        echo -e "${COLOR_SUCCESS}✅ Script erfolgreich aktualisiert!${COLOR_RESET}"
-                        echo "   Bitte Script erneut ausführen, um die neue Version zu verwenden."
+                        echo -e "${COLOR_SUCCESS}✅ $(t 'script_updated_successfully')${COLOR_RESET}"
+                        echo "   $(t 'please_rerun_script')"
                     else
                         log_error "Automatisches Update fehlgeschlagen!"
-                        echo -e "${COLOR_ERROR}❌ Automatisches Update fehlgeschlagen!${COLOR_RESET}"
-                        echo "   Bitte manuell aktualisieren."
+                        echo -e "${COLOR_ERROR}❌ $(t 'auto_update_failed')${COLOR_RESET}"
+                        echo "   $(t 'please_update_manually')"
                     fi
                 else
-                    echo "   Update übersprungen."
+                    echo "   $(t 'update_skipped')"
                 fi
             else
-                echo "   Update-Optionen:"
+                echo "   $(t 'update_options')"
                 echo "   1. Git: cd $(dirname "$SCRIPT_DIR")/cachyos-multi-updater && git pull"
                 echo "   2. Download: https://github.com/$GITHUB_REPO/releases/latest"
                 echo "   3. ZIP: https://github.com/$GITHUB_REPO/archive/refs/tags/v$LATEST_VERSION.zip"
                 echo ""
-                echo "   Tipp: Setze ENABLE_AUTO_UPDATE=true in config.conf für automatische Updates"
+                echo "   $(t 'tip_auto_update')"
             fi
         else
             log_info "Lokale Version ist neuer als GitHub-Version (Entwicklung?)"
-            echo "ℹ️  Lokale Version: $SCRIPT_VERSION (GitHub: $LATEST_VERSION)"
+            echo "ℹ️  $(t 'local_version') $SCRIPT_VERSION (GitHub: $LATEST_VERSION)"
         fi
     else
         log_info "Script ist auf dem neuesten Stand (Version $SCRIPT_VERSION)"
-        echo "✅ Script ist aktuell (Version $SCRIPT_VERSION)"
+        echo "✅ $(t 'script_current') $SCRIPT_VERSION)"
     fi
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""

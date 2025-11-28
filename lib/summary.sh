@@ -20,15 +20,15 @@ show_update_summary() {
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${COLOR_BOLD}✅ UPDATE ABGESCHLOSSEN${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}✅ $(t 'update_completed_title')${COLOR_RESET}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 
     # Dauer
     if [ $minutes -gt 0 ]; then
-        echo -e "⏱️  Dauer: ${COLOR_BOLD}${minutes}m ${seconds}s${COLOR_RESET}"
+        echo -e "⏱️  $(t 'duration_label') ${COLOR_BOLD}${minutes}m ${seconds}s${COLOR_RESET}"
     else
-        echo -e "⏱️  Dauer: ${COLOR_BOLD}${seconds}s${COLOR_RESET}"
+        echo -e "⏱️  $(t 'duration_label') ${COLOR_BOLD}${seconds}s${COLOR_RESET}"
     fi
     echo ""
 
@@ -38,39 +38,39 @@ show_update_summary() {
     if [ "$UPDATE_SYSTEM" = "true" ] && [ "$SYSTEM_UPDATED" = "true" ]; then
         SYSTEM_PACKAGES_CLEAN=$(echo "$SYSTEM_PACKAGES" | tr -d '\n\r' | grep -oE '[0-9]+' | head -1 || echo "0")
         if [ -n "$SYSTEM_PACKAGES_CLEAN" ] && [ "$SYSTEM_PACKAGES_CLEAN" -gt 0 ] 2>/dev/null; then
-            echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} System: $SYSTEM_PACKAGES_CLEAN Pakete"
+            echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'system_label') $SYSTEM_PACKAGES_CLEAN $(t 'packages')"
             updated_count=$((updated_count + 1))
         fi
     fi
 
     if [ "$UPDATE_AUR" = "true" ] && [ "$AUR_UPDATED" = "true" ]; then
         if [ -n "$AUR_PACKAGES" ] && [ "$AUR_PACKAGES" -gt 0 ] 2>/dev/null; then
-            echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} AUR: $AUR_PACKAGES Pakete"
+            echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'aur_label') $AUR_PACKAGES $(t 'packages')"
             updated_count=$((updated_count + 1))
         fi
     fi
 
     if [ "$UPDATE_CURSOR" = "true" ] && [ "$CURSOR_UPDATED" = "true" ]; then
-        echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} Cursor aktualisiert"
+        echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'cursor_updated')"
         updated_count=$((updated_count + 1))
     fi
 
     if [ "$UPDATE_ADGUARD" = "true" ] && [ "$ADGUARD_UPDATED" = "true" ]; then
-        echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} AdGuard Home aktualisiert"
+        echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'adguard_updated_label')"
         updated_count=$((updated_count + 1))
     fi
 
     if [ "$UPDATE_FLATPAK" = "true" ] && [ "$FLATPAK_UPDATED" = "true" ]; then
         FLATPAK_PACKAGES_CLEAN=$(echo "$FLATPAK_PACKAGES" | tr -d '\n\r' | grep -oE '[0-9]+' | head -1 || echo "0")
         if [ -n "$FLATPAK_PACKAGES_CLEAN" ] && [ "$FLATPAK_PACKAGES_CLEAN" -gt 0 ] 2>/dev/null; then
-            echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} Flatpak: $FLATPAK_PACKAGES_CLEAN Pakete"
+            echo -e "${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'flatpak_updates'): $FLATPAK_PACKAGES_CLEAN $(t 'packages')"
             updated_count=$((updated_count + 1))
         fi
     fi
 
     # Falls nichts aktualisiert wurde
     if [ $updated_count -eq 0 ]; then
-        echo -e "${COLOR_WARNING}○${COLOR_RESET} Alle Komponenten waren bereits aktuell"
+        echo -e "${COLOR_WARNING}○${COLOR_RESET} $(t 'all_components_current')"
     fi
 
     echo ""
@@ -82,11 +82,11 @@ show_update_summary() {
 show_dry_run_summary() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${COLOR_WARNING}🔍 DRY-RUN ABGESCHLOSSEN${COLOR_RESET}"
+    echo -e "${COLOR_WARNING}🔍 $(t 'dry_run_completed')${COLOR_RESET}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo -e "${COLOR_WARNING}Keine Änderungen wurden vorgenommen.${COLOR_RESET}"
-    echo "Führe das Script ohne --dry-run aus, um Updates durchzuführen."
+    echo -e "${COLOR_WARNING}$(t 'no_changes_made')${COLOR_RESET}"
+    echo "$(t 'run_without_dry_run')"
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""

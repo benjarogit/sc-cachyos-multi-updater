@@ -64,7 +64,7 @@ EOF
 
 show_stats() {
     if [ ! -f "$STATS_FILE" ]; then
-        echo "ℹ️  Keine Statistiken verfügbar (erstes Update)"
+        echo "ℹ️  $(t 'no_stats_available')"
         return 0
     fi
 
@@ -88,14 +88,14 @@ show_stats() {
 
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo -e "${COLOR_BOLD}📊 UPDATE-STATISTIKEN${COLOR_RESET}"
+    echo -e "${COLOR_BOLD}📊 $(t 'update_statistics')${COLOR_RESET}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "   Gesamt-Updates:     $total_updates"
-    echo -e "   Erfolgreich:        ${COLOR_SUCCESS}$successful${COLOR_RESET}"
-    echo -e "   Fehlgeschlagen:     ${COLOR_ERROR}$failed${COLOR_RESET}"
-    echo "   Erfolgsrate:        $success_rate%"
-    echo "   Durchschn. Dauer:   $((avg_duration / 60))m $((avg_duration % 60))s"
-    echo "   Letztes Update:     $(date -d "$last_update" '+%d.%m.%Y %H:%M' 2>/dev/null || echo "$last_update")"
+    echo "   $(t 'total_updates')     $total_updates"
+    echo -e "   $(t 'successful'):        ${COLOR_SUCCESS}$successful${COLOR_RESET}"
+    echo -e "   $(t 'failed'):     ${COLOR_ERROR}$failed${COLOR_RESET}"
+    echo "   $(t 'success_rate_label'):        $success_rate%"
+    echo "   $(t 'avg_duration'):   $((avg_duration / 60))m $((avg_duration % 60))s"
+    echo "   $(t 'last_update'):     $(date -d "$last_update" '+%d.%m.%Y %H:%M' 2>/dev/null || echo "$last_update")"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 }
@@ -116,8 +116,8 @@ estimate_duration() {
         local minutes=$((avg_duration / 60))
         local seconds=$((avg_duration % 60))
         echo ""
-        echo "⏱️  Geschätzte Dauer: ~${minutes}m ${seconds}s"
-        echo "   (Durchschnitt aus $total_updates Updates)"
+        echo "⏱️  $(t 'estimated_duration') ~${minutes}m ${seconds}s"
+        echo "   $(t 'average_from') $total_updates $(t 'updates'))"
         echo ""
     fi
 }
