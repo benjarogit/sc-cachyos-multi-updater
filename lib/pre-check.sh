@@ -101,21 +101,16 @@ check_available_updates() {
             else
                 # Über AUR installiert → prüfe AUR-Version vs. installierte Version
                 # Versuche aktuelle installierte Version zu ermitteln
-                CURSOR_PATH=$(which cursor)
-                CURSOR_INSTALL_DIR=$(dirname "$(readlink -f "$CURSOR_PATH")")
+                # WICHTIG: Gleiche Priorität wie im Hauptscript!
+                # Priorisiere /usr/share/cursor (AUR-Installation), dann /opt/cursor, dann $HOME/.local/share/cursor
                 CURRENT_VERSION="unbekannt"
-
-                if [ -f "$CURSOR_INSTALL_DIR/resources/app/package.json" ]; then
-                    CURRENT_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$CURSOR_INSTALL_DIR/resources/app/package.json" 2>/dev/null | head -1 || echo "unbekannt")
-                fi
-                # Fallback: Prüfe alternative Pfade
-                if [ "$CURRENT_VERSION" = "unbekannt" ]; then
-                    for alt_path in "/opt/Cursor/resources/app/package.json" "/usr/share/cursor/resources/app/package.json" "$HOME/.local/share/cursor/resources/app/package.json"; do
-                        if [ -f "$alt_path" ]; then
-                            CURRENT_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$alt_path" 2>/dev/null | head -1 || echo "unbekannt")
-                            [ "$CURRENT_VERSION" != "unbekannt" ] && break
-                        fi
-                    done
+                
+                if [ -f "/usr/share/cursor/resources/app/package.json" ]; then
+                    CURRENT_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "/usr/share/cursor/resources/app/package.json" 2>/dev/null | head -1 || echo "unbekannt")
+                elif [ -f "/opt/cursor/resources/app/package.json" ]; then
+                    CURRENT_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "/opt/cursor/resources/app/package.json" 2>/dev/null | head -1 || echo "unbekannt")
+                elif [ -f "$HOME/.local/share/cursor/resources/app/package.json" ]; then
+                    CURRENT_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$HOME/.local/share/cursor/resources/app/package.json" 2>/dev/null | head -1 || echo "unbekannt")
                 fi
 
                 # Prüfe AUR-Version
@@ -125,20 +120,30 @@ check_available_updates() {
                     
                     if [ "$CURRENT_VERSION" != "unbekannt" ]; then
                         # Vergleiche installierte Version mit AUR-Version (semantischer Vergleich)
-                        # Verwende sort -V für semantischen Versionsvergleich
-                        if [ "$CURRENT_VERSION" = "$CURSOR_AUR_VERSION" ]; then
-                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert)"
+                        # Verwende compare_versions Funktion wenn verfügbar, sonst sort -V
+                        local VERSION_COMPARE=""
+                        if command -v compare_versions >/dev/null 2>&1; then
+                            VERSION_COMPARE=$(compare_versions "$CURRENT_VERSION" "$CURSOR_AUR_VERSION")
                         else
-                            # Prüfe ob installierte Version älter ist
-                            if printf '%s\n%s\n' "$CURRENT_VERSION" "$CURSOR_AUR_VERSION" | sort -V | head -1 | grep -q "^$CURRENT_VERSION$"; then
-                                # CURRENT_VERSION ist älter
-                                echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $CURSOR_AUR_VERSION (AUR-Update verfügbar)"
-                                updates_found=true
-                                total_packages=$((total_packages + 1))
+                            # Fallback: Verwende sort -V für semantischen Versionsvergleich
+                            if [ "$CURRENT_VERSION" = "$CURSOR_AUR_VERSION" ]; then
+                                VERSION_COMPARE="equal"
+                            elif printf '%s\n%s\n' "$CURRENT_VERSION" "$CURSOR_AUR_VERSION" | sort -V | head -1 | grep -q "^$CURRENT_VERSION$"; then
+                                VERSION_COMPARE="older"
                             else
-                                # CURRENT_VERSION ist neuer (sollte nicht passieren, aber sicherheitshalber)
-                                echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert, AUR: v$CURSOR_AUR_VERSION)"
+                                VERSION_COMPARE="newer"
                             fi
+                        fi
+                        
+                        if [ "$VERSION_COMPARE" = "equal" ]; then
+                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert)"
+                        elif [ "$VERSION_COMPARE" = "older" ]; then
+                            echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $CURSOR_AUR_VERSION (AUR-Update verfügbar)"
+                            updates_found=true
+                            total_packages=$((total_packages + 1))
+                        else
+                            # CURRENT_VERSION ist neuer (sollte nicht passieren, aber sicherheitshalber)
+                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert, AUR: v$CURSOR_AUR_VERSION)"
                         fi
                     else
                         echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked') (AUR: v$CURSOR_AUR_VERSION)"

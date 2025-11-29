@@ -15,7 +15,7 @@ ENABLE_FLATPAK_UPDATE=true
 
 # ========== Logging ==========
 # Anzahl der zu behaltenden Log-Dateien (Standard: 10)
-MAX_LOG_FILES=10
+MAX_LOG_FILES=3
 
 # ========== Benachrichtigungen ==========
 # Desktop-Benachrichtigungen aktivieren/deaktivieren

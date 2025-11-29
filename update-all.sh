@@ -32,7 +32,7 @@ LOG_DIR="$SCRIPT_DIR/logs"
 readonly LOG_DIR
 LOG_FILE="$LOG_DIR/update-$(date +%Y%m%d-%H%M%S).log"
 readonly LOG_FILE
-MAX_LOG_FILES=10
+MAX_LOG_FILES=3
 readonly CONFIG_FILE="$SCRIPT_DIR/config.conf"
 
 # Default-Werte
@@ -438,7 +438,21 @@ download_with_retry() {
 # ========== Alte Logs aufräumen ==========
 cleanup_old_logs() {
     if [ -d "$LOG_DIR" ]; then
-        find "$LOG_DIR" -name "update-*.log" -type f | sort -r | tail -n +$((MAX_LOG_FILES + 1)) | xargs rm -f 2>/dev/null || true
+        # Zähle vorhandene Log-Dateien
+        local log_count
+        log_count=$(find "$LOG_DIR" -name "update-*.log" -type f 2>/dev/null | wc -l)
+        
+        # Wenn mehr als MAX_LOG_FILES vorhanden sind, lösche die ältesten
+        if [ "$log_count" -gt "$MAX_LOG_FILES" ]; then
+            local files_to_delete
+            files_to_delete=$((log_count - MAX_LOG_FILES))
+            log_info "Bereinige alte Log-Dateien: $files_to_delete von $log_count Dateien werden gelöscht (behält $MAX_LOG_FILES neueste)"
+            find "$LOG_DIR" -name "update-*.log" -type f -printf '%T@ %p\n' 2>/dev/null | \
+                sort -rn | \
+                tail -n +$((MAX_LOG_FILES + 1)) | \
+                cut -d' ' -f2- | \
+                xargs rm -f 2>/dev/null || true
+        fi
     fi
 }
 
@@ -555,6 +569,10 @@ if [ "$UPDATE_SYSTEM" = "true" ]; then
         # Bereinige Newlines und Whitespace
         SYSTEM_PACKAGES=$(echo "$SYSTEM_PACKAGES" | tr -d '\n\r' | xargs)
         log_info "$(t 'log_packages_to_update') $SYSTEM_PACKAGES"
+        # Debug: Liste der zu aktualisierenden Pakete
+        if [ "$SYSTEM_PACKAGES" -gt 0 ]; then
+            log_info "Pakete: $(pacman -Qu 2>/dev/null | head -5 | tr '\n' ',' | sed 's/,$//' || echo 'N/A')"
+        fi
 
         # Führe Pacman-Update durch
         if sudo pacman -Syu --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
