@@ -16,14 +16,12 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Script directory (where gitpush.sh is located)
+# Script directory (where gitpush.sh is located - root of repo)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Root directory (parent of cachyos-multi-updater/)
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-cd "${ROOT_DIR}"
+cd "${SCRIPT_DIR}"
 
 # Read version from update-all.sh (in cachyos-multi-updater/)
-UPDATE_SCRIPT="${SCRIPT_DIR}/update-all.sh"
+UPDATE_SCRIPT="${SCRIPT_DIR}/cachyos-multi-updater/update-all.sh"
 if [ ! -f "${UPDATE_SCRIPT}" ]; then
     echo -e "${RED}❌ Fehler: update-all.sh nicht gefunden in ${SCRIPT_DIR}${NC}"
     exit 1
