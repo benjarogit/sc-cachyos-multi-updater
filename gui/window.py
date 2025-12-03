@@ -594,9 +594,18 @@ class MainWindow(QMainWindow):
     def open_github(self):
         """Open GitHub repository in browser"""
         import webbrowser
+        import subprocess
         github_repo = self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater")
         github_url = f"https://github.com/{github_repo}"
-        webbrowser.open(github_url)
+        
+        # Try to open URL using xdg-open (more reliable on Linux)
+        try:
+            subprocess.Popen(['xdg-open', github_url], 
+                           stdout=subprocess.DEVNULL, 
+                           stderr=subprocess.DEVNULL)
+        except (FileNotFoundError, OSError):
+            # Fallback to webbrowser module
+            webbrowser.open(github_url)
     
     def open_github_releases(self):
         """Open GitHub releases page"""

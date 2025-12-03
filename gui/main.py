@@ -8,6 +8,9 @@ import sys
 import os
 from pathlib import Path
 
+# Suppress Qt QDBus warnings (harmless but annoying)
+os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.services.debug=false")
+
 # Add gui directory to path for imports
 gui_dir = Path(__file__).parent
 if str(gui_dir) not in sys.path:
@@ -15,6 +18,7 @@ if str(gui_dir) not in sys.path:
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import Qt
+from PyQt6.QtCore import qInstallMessageHandler
 
 # Initialize i18n before importing window
 from i18n import init_i18n
