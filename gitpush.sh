@@ -162,6 +162,7 @@ if command -v gh &> /dev/null; then
     done
     
     # Extract changelog if file exists
+    # KRITISCHE REGEL: Changelog IMMER nur auf Englisch!
     if [ -n "$CHANGELOG_FILE" ] && [ -f "$CHANGELOG_FILE" ]; then
         RELEASE_NOTES=$(cat "$CHANGELOG_FILE")
     else
