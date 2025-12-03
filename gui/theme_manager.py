@@ -43,11 +43,12 @@ class ThemeManager:
         QPushButton:hover {
             background-color: #4a4a4a;
             border: 1px solid #666666;
-            transform: scale(1.02);
+            /* Note: Qt stylesheets don't support transform: scale(), using border-width instead for visual feedback */
+            border-width: 2px;
         }
         QPushButton:pressed {
             background-color: #2a2a2a;
-            transform: scale(0.98);
+            border-width: 1px;
         }
         QPushButton:disabled {
             background-color: #2b2b2b;
@@ -199,11 +200,12 @@ class ThemeManager:
         QPushButton:hover {
             background-color: #e0e0e0;
             border: 1px solid #999999;
-            transform: scale(1.02);
+            /* Note: Qt stylesheets don't support transform: scale(), using border-width instead for visual feedback */
+            border-width: 2px;
         }
         QPushButton:pressed {
             background-color: #d0d0d0;
-            transform: scale(0.98);
+            border-width: 1px;
         }
         QPushButton:disabled {
             background-color: #f5f5f5;

@@ -47,11 +47,14 @@ def main():
     # Suppress Qt QDBus warnings and other Qt messages
     def qt_message_handler(msg_type, context, message):
         # Filter out QDBus warnings and portal errors
-        if ("QDBusError" in message or 
-            "qt.qpa.services" in message or 
-            "Failed to register with host portal" in message or
-            "org.freedesktop.portal" in message or
-            "org.kde.kioclient" in message):
+        message_str = str(message) if message else ""
+        if ("QDBusError" in message_str or 
+            "qt.qpa.services" in message_str or 
+            "Failed to register with host portal" in message_str or
+            "org.freedesktop.portal" in message_str or
+            "org.kde.kioclient" in message_str or
+            "Could not register app ID" in message_str or
+            "App info not found" in message_str):
             return
         # Print other messages normally (optional, can be removed)
         # print(message)

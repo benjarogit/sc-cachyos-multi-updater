@@ -979,46 +979,48 @@ class ConfigDialog(QDialog):
             except ImportError:
                 PasswordManager = None
         
-        if PasswordManager and hasattr(self, 'sudo_password') and self.sudo_password.text():
-            password = self.sudo_password.text()
+        # Handle sudo password saving
+        if PasswordManager and hasattr(self, 'sudo_password'):
+            password_text = self.sudo_password.text()
+            password_manager = PasswordManager(str(self.script_dir))
+            
             if hasattr(self, 'save_sudo_password') and self.save_sudo_password.isChecked():
-                # Save password securely
-                password_manager = PasswordManager(str(self.script_dir))
-                if password_manager.is_available():
-                    if password_manager.save_password(password):
-                        # Store marker in config (not the password itself)
-                        self.config["SUDO_PASSWORD_STORED"] = "true"
-                        self.config["SUDO_PASSWORD_METHOD"] = password_manager.get_storage_method()
+                # Checkbox is checked - save password if provided
+                if password_text:
+                    # Save new password securely
+                    if password_manager.is_available():
+                        if password_manager.save_password(password_text):
+                            # Store marker in config (not the password itself)
+                            self.config["SUDO_PASSWORD_STORED"] = "true"
+                            self.config["SUDO_PASSWORD_METHOD"] = password_manager.get_storage_method()
+                        else:
+                            # Fallback: warn user
+                            from PyQt6.QtWidgets import QMessageBox
+                            QMessageBox.warning(
+                                self,
+                                t("gui_error", "Error"),
+                                t("gui_password_save_failed", "Failed to save password securely. Please install python-keyring or cryptography.")
+                            )
                     else:
-                        # Fallback: warn user
+                        # No secure storage available
                         from PyQt6.QtWidgets import QMessageBox
                         QMessageBox.warning(
                             self,
                             t("gui_error", "Error"),
-                            t("gui_password_save_failed", "Failed to save password securely. Please install python-keyring or cryptography.")
+                            t("gui_password_storage_unavailable", "Secure password storage not available. Please install python-keyring or cryptography.")
                         )
-                else:
-                    # No secure storage available
-                    from PyQt6.QtWidgets import QMessageBox
-                    QMessageBox.warning(
-                        self,
-                        t("gui_error", "Error"),
-                        t("gui_password_storage_unavailable", "Secure password storage not available. Please install python-keyring or cryptography.")
-                    )
+                # If password field is empty but checkbox is checked, keep existing password
             else:
-                # Don't save password if checkbox is unchecked
-                if PasswordManager:
-                    password_manager = PasswordManager(str(self.script_dir))
+                # Checkbox is unchecked - only delete if user explicitly wants to remove password
+                # Don't delete if password field is empty (user just didn't enter a new one)
+                # Only delete if user explicitly unchecked the checkbox AND there was a stored password
+                # This is handled by checking if password was previously stored
+                if self.config.get("SUDO_PASSWORD_STORED") == "true":
+                    # User explicitly unchecked save checkbox - remove stored password
                     password_manager.delete_password()
-                self.config.pop("SUDO_PASSWORD_STORED", None)
-                self.config.pop("SUDO_PASSWORD_METHOD", None)
-        elif hasattr(self, 'save_sudo_password') and not self.save_sudo_password.isChecked():
-            # Remove password if checkbox is unchecked
-            if PasswordManager:
-                password_manager = PasswordManager(str(self.script_dir))
-                password_manager.delete_password()
-            self.config.pop("SUDO_PASSWORD_STORED", None)
-            self.config.pop("SUDO_PASSWORD_METHOD", None)
+                    self.config.pop("SUDO_PASSWORD_STORED", None)
+                    self.config.pop("SUDO_PASSWORD_METHOD", None)
+                # If no password was stored, do nothing (checkbox unchecked is the default state)
         
         # Advanced
         if self.github_repo.text():

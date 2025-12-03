@@ -685,24 +685,47 @@ class MainWindow(QMainWindow):
         """Open GitHub repository in browser"""
         import webbrowser
         import subprocess
+        import os
         github_repo = self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater")
         github_url = f"https://github.com/{github_repo}"
         
-        # Try to open URL using xdg-open (more reliable on Linux)
+        # Try to open URL using xdg-open (more reliable on Linux, avoids QDBus warnings)
         try:
+            # Suppress QDBus warnings by setting environment variable
+            env = os.environ.copy()
+            env.setdefault("QT_LOGGING_RULES", "qt.qpa.services.debug=false")
             subprocess.Popen(['xdg-open', github_url], 
                            stdout=subprocess.DEVNULL, 
-                           stderr=subprocess.DEVNULL)
+                           stderr=subprocess.DEVNULL,
+                           env=env)
         except (FileNotFoundError, OSError):
-            # Fallback to webbrowser module
+            # Fallback to webbrowser module (also suppress warnings)
+            os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.services.debug=false")
             webbrowser.open(github_url)
     
     def open_github_releases(self):
         """Open GitHub releases page"""
+        import subprocess
         import webbrowser
+        import os
         github_repo = self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater")
         github_url = f"https://github.com/{github_repo}/releases"
-        webbrowser.open(github_url)
+        
+        # Try to open URL using xdg-open (more reliable on Linux, avoids QDBus warnings)
+        try:
+            # Suppress QDBus warnings by setting environment variable
+            env = os.environ.copy()
+            env.setdefault("QT_LOGGING_RULES", "qt.qpa.services.debug=false")
+            # Suppress stderr to avoid QDBus warnings
+            subprocess.Popen(['xdg-open', github_url], 
+                           stdout=subprocess.DEVNULL, 
+                           stderr=subprocess.DEVNULL,
+                           env=env,
+                           start_new_session=True)
+        except (OSError, FileNotFoundError):
+            # Fallback to webbrowser module (also suppress warnings)
+            os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.services.debug=false")
+            webbrowser.open(github_url)
     
     def switch_theme(self):
         """Switch theme cyclically: auto -> light -> dark -> auto"""

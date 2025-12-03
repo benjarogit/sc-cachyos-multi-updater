@@ -147,14 +147,26 @@ class PasswordManager:
                 fernet = Fernet(key)
                 encrypted = fernet.encrypt(password.encode())
                 
-                # Store encrypted password in config (base64 encoded)
-                # NOTE: This returns the encrypted string, but the function signature says bool
-                # The caller (config_dialog.py) should handle the encrypted value separately
-                # For now, we return True to match the signature, and the encrypted value
-                # should be stored via ConfigManager separately
+                # Store encrypted password in config file (base64 encoded)
+                # We need to store it in the config file since we can't use keyring
                 encrypted_b64 = base64.b64encode(encrypted).decode()
-                # TODO: Store encrypted_b64 in config via ConfigManager
-                # For now, return True to match function signature
+                
+                # Store encrypted password in config file via ConfigManager
+                # Import ConfigManager here to avoid circular imports
+                try:
+                    from .config_manager import ConfigManager
+                except ImportError:
+                    try:
+                        from config_manager import ConfigManager
+                    except ImportError:
+                        self.logger.error("ConfigManager not available for storing encrypted password")
+                        return False
+                
+                config_manager = ConfigManager(self.script_dir)
+                config = config_manager.load_config()
+                config["SUDO_PASSWORD_ENCRYPTED"] = encrypted_b64
+                config_manager.save_config(config)
+                
                 return True
             except (ValueError, TypeError, AttributeError) as e:
                 self.logger.error(f"Failed to encrypt password: {e}")
@@ -182,10 +194,35 @@ class PasswordManager:
             except Exception:
                 pass
         
-        # Method 2: Try encrypted config (for backward compatibility)
-        # This would be handled by ConfigManager if password was stored encrypted
-        # For now, we'll check if there's an encrypted password in config
-        # (This would require ConfigManager to pass encrypted value here)
+        # Method 2: Try encrypted config (for Fernet fallback)
+        if HAS_CRYPTOGRAPHY:
+            try:
+                # Import ConfigManager here to avoid circular imports
+                try:
+                    from .config_manager import ConfigManager
+                except ImportError:
+                    try:
+                        from config_manager import ConfigManager
+                    except ImportError:
+                        return None
+                
+                config_manager = ConfigManager(self.script_dir)
+                config = config_manager.load_config()
+                encrypted_b64 = config.get("SUDO_PASSWORD_ENCRYPTED")
+                
+                if encrypted_b64:
+                    # Decrypt password
+                    key = self._get_encryption_key()
+                    if not key:
+                        return None
+                    
+                    fernet = Fernet(key)
+                    encrypted = base64.b64decode(encrypted_b64.encode())
+                    password = fernet.decrypt(encrypted).decode()
+                    return password
+            except Exception as e:
+                self.logger.debug(f"Failed to retrieve encrypted password: {e}")
+                return None
         
         return None
     
@@ -200,25 +237,40 @@ class PasswordManager:
         if HAS_KEYRING:
             try:
                 keyring.delete_password(self.SERVICE_NAME, self.USERNAME)
-                return True
             except keyring.errors.PasswordDeleteError:
                 # Password doesn't exist, that's OK
-                return True
+                pass
             except (keyring.errors.KeyringError, RuntimeError) as e:
                 self.logger.debug(f"Failed to delete password from keyring: {e}")
             except Exception as e:
                 self.logger.warning(f"Unexpected error deleting password from keyring: {e}")
         
-        # Method 2: Delete key file (for Fernet)
-        if self.key_file.exists():
+        # Method 2: Delete encrypted password from config (for Fernet)
+        try:
             try:
-                self.key_file.unlink()
-                return True
-            except (OSError, PermissionError) as e:
-                self.logger.error(f"Failed to delete key file: {e}")
-            except Exception as e:
-                self.logger.warning(f"Unexpected error deleting key file: {e}")
-                pass
+                from .config_manager import ConfigManager
+            except ImportError:
+                try:
+                    from config_manager import ConfigManager
+                except ImportError:
+                    ConfigManager = None
+            
+            if ConfigManager:
+                config_manager = ConfigManager(self.script_dir)
+                config = config_manager.load_config()
+                config.pop("SUDO_PASSWORD_ENCRYPTED", None)
+                config_manager.save_config(config)
+        except Exception as e:
+            self.logger.debug(f"Failed to delete encrypted password from config: {e}")
+        
+        # Method 3: Delete key file (optional - only if we want to remove encryption key)
+        # Note: We don't delete the key file by default, as it might be used for other purposes
+        # Uncomment if you want to delete the key file as well:
+        # if self.key_file.exists():
+        #     try:
+        #         self.key_file.unlink()
+        #     except (OSError, PermissionError) as e:
+        #         self.logger.error(f"Failed to delete key file: {e}")
         
         return True
     

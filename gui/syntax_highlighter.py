@@ -61,8 +61,8 @@ class ConsoleSyntaxHighlighter(QSyntaxHighlighter):
     def highlightBlock(self, text: str):
         """Apply highlighting rules to a block of text"""
         for pattern, format in self.highlighting_rules:
-            expression = QRegularExpression(pattern)
-            iterator = expression.globalMatch(text)
+            # pattern is already a QRegularExpression object, use it directly
+            iterator = pattern.globalMatch(text)
             while iterator.hasNext():
                 match = iterator.next()
                 self.setFormat(match.capturedStart(), match.capturedLength(), format)
