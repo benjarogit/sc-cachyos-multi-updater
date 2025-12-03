@@ -67,6 +67,10 @@ class ConfigDialog(QDialog):
         advanced_tab = self.create_advanced_tab()
         tabs.addTab(advanced_tab, t("gui_tab_advanced", "Advanced"))
         
+        # Tab 6: Info
+        info_tab = self.create_info_tab()
+        tabs.addTab(info_tab, t("gui_tab_info", "Info"))
+        
         layout.addWidget(tabs)
         
         # Buttons
@@ -162,14 +166,14 @@ class ConfigDialog(QDialog):
         icon_layout.addWidget(QLabel(t("gui_icon", "Icon:")))
         
         self.desktop_icon = QComboBox()
-        # Common system icons
+        # Common system icons (removed duplicates)
         system_icons = [
             ("system-software-update", t("gui_icon_system_update", "System Update")),
-            ("system-update", t("gui_icon_system", "System")),
-            ("software-update-available", t("gui_icon_software_update", "Software Update")),
             ("update-manager", t("gui_icon_update_manager", "Update Manager")),
             ("package-updater", t("gui_icon_package_updater", "Package Updater")),
             ("applications-system", t("gui_icon_applications_system", "Applications System")),
+            ("distributor-logo", t("gui_icon_distributor", "Distributor Logo")),
+            ("preferences-system", t("gui_icon_preferences_system", "Preferences System")),
         ]
         for icon_name, icon_label in system_icons:
             self.desktop_icon.addItem(icon_label, icon_name)
@@ -567,6 +571,219 @@ class ConfigDialog(QDialog):
         
         widget.setLayout(layout)
         return widget
+    
+    def create_info_tab(self):
+        """Create info tab with tool and system information"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        
+        import platform
+        import subprocess
+        
+        # Tool Information
+        tool_group = QGroupBox(t("gui_info_tool", "Tool Information"))
+        tool_layout = QVBoxLayout()
+        
+        # Read script version
+        script_path = Path(self.script_dir) / "update-all.sh"
+        local_version = "unknown"
+        if script_path.exists():
+            try:
+                with open(script_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if 'readonly SCRIPT_VERSION=' in line:
+                            local_version = line.split('"')[1] if '"' in line else line.split("'")[1]
+                            break
+            except Exception:
+                pass
+        
+        # Get GitHub version
+        github_version = "checking..."
+        try:
+            from .version_checker import VersionChecker
+        except ImportError:
+            try:
+                from version_checker import VersionChecker
+            except ImportError:
+                pass
+        
+        try:
+            github_repo = self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater")
+            checker = VersionChecker(str(self.script_dir), github_repo)
+            latest, error = checker.check_latest_version()
+            if latest and not error:
+                github_version = latest
+            elif error:
+                github_version = f"error: {error}"
+        except Exception:
+            github_version = "unavailable"
+        
+        # Version comparison
+        version_status = ""
+        try:
+            local_parts = [int(x) for x in local_version.split('.')]
+            github_parts = [int(x) for x in github_version.split('.')]
+            if github_parts > local_parts:
+                version_status = f" ({t('gui_update_available', 'Update available!')})"
+            elif github_parts == local_parts:
+                version_status = f" ({t('gui_version_up_to_date', 'Up to date')})"
+        except Exception:
+            pass
+        
+        tool_info = QTextEdit()
+        tool_info.setReadOnly(True)
+        tool_info.setMaximumHeight(150)
+        tool_info_text = f"""{t('gui_info_tool_name', 'Tool Name')}: CachyOS Multi-Updater
+{t('gui_info_version_local', 'Local Version')}: {local_version}
+{t('gui_info_version_github', 'GitHub Version')}: {github_version}{version_status}
+{t('gui_info_github_repo', 'GitHub Repository')}: {self.config.get('GITHUB_REPO', 'benjarogit/sc-cachyos-multi-updater')}
+{t('gui_info_author', 'Author')}: Sunny C.
+{t('gui_info_website', 'Website')}: https://benjaro.info
+{t('gui_info_year', 'Year')}: 2025"""
+        tool_info.setPlainText(tool_info_text.strip())
+        tool_layout.addWidget(tool_info)
+        
+        tool_group.setLayout(tool_layout)
+        layout.addWidget(tool_group)
+        
+        # System Information
+        system_group = QGroupBox(t("gui_info_system", "System Information"))
+        system_layout = QVBoxLayout()
+        
+        system_info = QTextEdit()
+        system_info.setReadOnly(True)
+        system_info.setFont(QFont("Monospace", 9))
+        
+        # Get system info
+        system_info_text = ""
+        
+        # OS
+        try:
+            with open('/etc/os-release', 'r') as f:
+                os_info = {}
+                for line in f:
+                    if '=' in line:
+                        key, value = line.strip().split('=', 1)
+                        os_info[key] = value.strip('"')
+                os_name = os_info.get('PRETTY_NAME', os_info.get('NAME', 'Unknown'))
+                system_info_text += f"{t('gui_info_os', 'Operating System')}: {os_name}\n"
+        except Exception:
+            system_info_text += f"{t('gui_info_os', 'Operating System')}: {platform.system()}\n"
+        
+        # Kernel
+        try:
+            kernel = platform.release()
+            system_info_text += f"{t('gui_info_kernel', 'Kernel')}: {kernel}\n"
+        except Exception:
+            pass
+        
+        # CPU
+        try:
+            cpu_info = platform.processor()
+            if not cpu_info or cpu_info == "":
+                # Try to get CPU info from /proc/cpuinfo
+                with open('/proc/cpuinfo', 'r') as f:
+                    for line in f:
+                        if 'model name' in line.lower():
+                            cpu_info = line.split(':', 1)[1].strip()
+                            break
+            system_info_text += f"{t('gui_info_cpu', 'CPU')}: {cpu_info}\n"
+        except Exception:
+            pass
+        
+        # Memory
+        try:
+            with open('/proc/meminfo', 'r') as f:
+                mem_total = 0
+                mem_available = 0
+                for line in f:
+                    if 'MemTotal:' in line:
+                        mem_total = int(line.split()[1]) // 1024  # Convert to MB
+                    elif 'MemAvailable:' in line:
+                        mem_available = int(line.split()[1]) // 1024
+                        break
+                mem_used = mem_total - mem_available
+                mem_percent = (mem_used / mem_total * 100) if mem_total > 0 else 0
+                system_info_text += f"{t('gui_info_memory', 'Memory')}: {mem_used} MB / {mem_total} MB ({mem_percent:.1f}%)\n"
+        except Exception:
+            pass
+        
+        # Packages
+        try:
+            # Pacman packages
+            result = subprocess.run(['pacman', '-Q'], capture_output=True, text=True, timeout=2)
+            pacman_count = len(result.stdout.strip().split('\n')) if result.stdout.strip() else 0
+            
+            # Flatpak packages
+            flatpak_count = 0
+            try:
+                result = subprocess.run(['flatpak', 'list'], capture_output=True, text=True, timeout=2)
+                flatpak_count = len(result.stdout.strip().split('\n')) if result.stdout.strip() else 0
+            except Exception:
+                pass
+            
+            system_info_text += f"{t('gui_info_packages', 'Packages')}: {pacman_count} (pacman), {flatpak_count} (flatpak)\n"
+        except Exception:
+            pass
+        
+        # Uptime
+        try:
+            with open('/proc/uptime', 'r') as f:
+                uptime_seconds = float(f.read().split()[0])
+                hours = int(uptime_seconds // 3600)
+                minutes = int((uptime_seconds % 3600) // 60)
+                system_info_text += f"{t('gui_info_uptime', 'Uptime')}: {hours}h {minutes}m\n"
+        except Exception:
+            pass
+        
+        system_info.setPlainText(system_info_text.strip())
+        system_layout.addWidget(system_info)
+        
+        system_group.setLayout(system_layout)
+        layout.addWidget(system_group)
+        
+        # Open Console Version button
+        console_layout = QHBoxLayout()
+        console_layout.addStretch()
+        
+        icon, text = get_fa_icon('terminal', t("gui_open_console_version", "Open Console Version"))
+        if not icon:
+            # Use a simple text icon if Font Awesome not available
+            text = "▶ " + text
+        console_btn = QPushButton(icon, text) if icon else QPushButton(text)
+        if not icon:
+            apply_fa_font(console_btn)
+        console_btn.clicked.connect(self.open_console_version)
+        console_layout.addWidget(console_btn)
+        
+        layout.addLayout(console_layout)
+        layout.addStretch()
+        
+        widget.setLayout(layout)
+        return widget
+    
+    def open_console_version(self):
+        """Open console version in terminal"""
+        import subprocess
+        script_dir = Path(self.script_dir)
+        wrapper_script = script_dir / "run-update.sh"
+        
+        try:
+            if wrapper_script.exists():
+                subprocess.Popen(['konsole', '--hold', '-e', str(wrapper_script.absolute())],
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
+            else:
+                script_path = script_dir / "update-all.sh"
+                subprocess.Popen(['konsole', '--hold', '-e', 'bash', str(script_path.absolute())],
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                t("gui_error", "Error"),
+                t("gui_console_open_failed", "Failed to open console version:") + f"\n{str(e)}"
+            )
     
     def browse_directory(self, line_edit: QLineEdit):
         """Browse for directory"""

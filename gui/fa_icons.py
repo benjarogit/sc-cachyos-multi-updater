@@ -32,6 +32,7 @@ FA_ICONS = {
     'adjust': '\uf042',      # fa-adjust (auto/theme toggle)
     'language': '\uf1ab',    # fa-language
     'list-alt': '\uf022',    # fa-list-alt (changelog/release)
+    'terminal': '\uf120',    # fa-terminal
 }
 
 def get_fa_icon(icon_name: str, text: str = "", size: int = 12, color: str = None):
