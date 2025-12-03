@@ -9,7 +9,7 @@ import re
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QCheckBox, QTextEdit, QProgressBar, QGroupBox,
-    QMessageBox, QFileDialog, QDialog, QComboBox, QSizePolicy
+    QMessageBox, QFileDialog, QDialog, QComboBox, QSizePolicy, QProgressDialog, QApplication
 )
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QThread, pyqtSignal, QAbstractAnimation
 from PyQt6.QtGui import QTextCharFormat, QColor, QFont, QMovie, QPixmap, QPainter
@@ -1040,32 +1040,303 @@ class MainWindow(QMainWindow):
         event.accept()
     
     def perform_automatic_update(self):
-        """Perform automatic update via git pull"""
-        import subprocess
-        import sys
+        """Perform automatic update via git pull or ZIP download"""
+        # Get root directory (parent of cachyos-multi-updater/)
+        # script_dir is cachyos-multi-updater/, so parent is root
+        root_dir = self.script_dir.parent
         
+        # HIGH-1 FIX: Atomically create lock file to prevent race conditions
+        # Use same mechanism as update-all.sh: create lock directory atomically
+        import os
+        lock_file = self.script_dir / ".update-all.lock"
+        lock_dir = self.script_dir / ".update-all.lock.d"
+        
+        # Try to create lock directory atomically (mkdir is atomic)
         try:
-            # Get root directory (parent of cachyos-multi-updater/)
-            # script_dir is cachyos-multi-updater/, so parent is root
-            root_dir = self.script_dir.parent
-            
-            # Check if .git exists in root
-            if not (root_dir / ".git").exists():
+            lock_dir.mkdir(exist_ok=False)
+            # Success: We got the lock atomically
+            try:
+                # Write our PID to lock file
+                with open(lock_file, 'w') as f:
+                    f.write(str(os.getpid()))
+                # Remove lock directory (lock file is now the indicator)
+                lock_dir.rmdir()
+                # Bug 1 FIX: Store lock file path immediately after successful creation
+                # This ensures cleanup works even if early returns occur
+                self.update_lock_file = lock_file
+            except Exception as lock_error:
+                # Cleanup on error
+                try:
+                    if lock_file.exists():
+                        lock_file.unlink()
+                except Exception:
+                    pass
+                try:
+                    if lock_dir.exists():
+                        lock_dir.rmdir()
+                except Exception:
+                    pass
                 QMessageBox.warning(
                     self,
                     t("gui_update_failed", "Update Failed"),
-                    t("gui_no_git_repo", "Git repository not found.\n\nPlease update manually via git pull.")
+                    t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(lock_error))
+                )
+                return
+        except FileExistsError:
+            # Lock directory exists - another process is updating
+            # Check if lock file exists and process is still running
+            if lock_file.exists():
+                try:
+                    with open(lock_file, 'r') as f:
+                        lock_pid = f.read().strip()
+                    if lock_pid:
+                        try:
+                            # Check if process is still running (signal 0 = check only)
+                            os.kill(int(lock_pid), 0)
+                            # Process is running - update already in progress
+                            QMessageBox.warning(
+                                self,
+                                t("gui_update_failed", "Update Failed"),
+                                t("gui_update_already_running", "Another update is already in progress.\n\nPlease wait for it to complete.")
+                            )
+                            return
+                        except (OSError, ValueError, ProcessLookupError):
+                            # Process not running - stale lock file, remove and retry
+                            try:
+                                lock_file.unlink()
+                            except Exception:
+                                pass
+                            try:
+                                if lock_dir.exists():
+                                    lock_dir.rmdir()
+                            except Exception:
+                                pass
+                            # Retry lock creation
+                            try:
+                                lock_dir.mkdir(exist_ok=False)
+                                with open(lock_file, 'w') as f:
+                                    f.write(str(os.getpid()))
+                                # Bug 1 FIX: Store lock file path BEFORE rmdir() to ensure cleanup
+                                # If rmdir() fails, we still need to clean up the lock file
+                                self.update_lock_file = lock_file
+                                lock_dir.rmdir()
+                            except FileExistsError:
+                                # Another process was faster - give up
+                                # Cleanup lock file if it was created
+                                if hasattr(self, 'update_lock_file') and self.update_lock_file.exists():
+                                    try:
+                                        self.update_lock_file.unlink()
+                                    except Exception:
+                                        pass
+                                QMessageBox.warning(
+                                    self,
+                                    t("gui_update_failed", "Update Failed"),
+                                    t("gui_update_already_running", "Another update is already in progress.\n\nPlease wait for it to complete.")
+                                )
+                                return
+                            except Exception as retry_error:
+                                # Bug 1 FIX: Cleanup lock file if creation partially succeeded
+                                # lock_file was written but rmdir() failed - clean up orphaned file
+                                if hasattr(self, 'update_lock_file') and self.update_lock_file.exists():
+                                    try:
+                                        self.update_lock_file.unlink()
+                                    except Exception:
+                                        pass
+                                QMessageBox.warning(
+                                    self,
+                                    t("gui_update_failed", "Update Failed"),
+                                    t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(retry_error))
+                                )
+                                return
+                except Exception:
+                    # Can't read lock file - assume stale, remove and retry
+                    try:
+                        if lock_file.exists():
+                            lock_file.unlink()
+                    except Exception:
+                        pass
+                    try:
+                        if lock_dir.exists():
+                            lock_dir.rmdir()
+                    except Exception:
+                        pass
+                    # Retry lock creation
+                    try:
+                        lock_dir.mkdir(exist_ok=False)
+                        with open(lock_file, 'w') as f:
+                            f.write(str(os.getpid()))
+                        # Bug 1 FIX: Store lock file path BEFORE rmdir() to ensure cleanup
+                        # If rmdir() fails, we still need to clean up the lock file
+                        self.update_lock_file = lock_file
+                        lock_dir.rmdir()
+                    except FileExistsError:
+                        # Another process was faster - give up
+                        # Cleanup lock file if it was created
+                        if hasattr(self, 'update_lock_file') and self.update_lock_file.exists():
+                            try:
+                                self.update_lock_file.unlink()
+                            except Exception:
+                                pass
+                        QMessageBox.warning(
+                            self,
+                            t("gui_update_failed", "Update Failed"),
+                            t("gui_update_already_running", "Another update is already in progress.\n\nPlease wait for it to complete.")
+                        )
+                        return
+                    except Exception as retry_error:
+                        # Bug 1 FIX: Cleanup lock file if creation partially succeeded
+                        # lock_file was written but rmdir() failed - clean up orphaned file
+                        if hasattr(self, 'update_lock_file') and self.update_lock_file.exists():
+                            try:
+                                self.update_lock_file.unlink()
+                            except Exception:
+                                pass
+                        QMessageBox.warning(
+                            self,
+                            t("gui_update_failed", "Update Failed"),
+                            t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(retry_error))
+                        )
+                        return
+            else:
+                # Lock directory exists but no lock file - remove directory and retry
+                try:
+                    lock_dir.rmdir()
+                except Exception:
+                    pass
+                # Retry lock creation
+                try:
+                    lock_dir.mkdir(exist_ok=False)
+                    with open(lock_file, 'w') as f:
+                        f.write(str(os.getpid()))
+                    # Bug 1 FIX: Store lock file path BEFORE rmdir() to ensure cleanup
+                    # If rmdir() fails, we still need to clean up the lock file
+                    self.update_lock_file = lock_file
+                    lock_dir.rmdir()
+                except FileExistsError:
+                    # Another process was faster - give up
+                    # Cleanup lock file if it was created
+                    if hasattr(self, 'update_lock_file') and self.update_lock_file.exists():
+                        try:
+                            self.update_lock_file.unlink()
+                        except Exception:
+                            pass
+                    QMessageBox.warning(
+                        self,
+                        t("gui_update_failed", "Update Failed"),
+                        t("gui_update_already_running", "Another update is already in progress.\n\nPlease wait for it to complete.")
+                    )
+                    return
+                except Exception as retry_error:
+                    # Bug 1 FIX: Cleanup lock file if creation partially succeeded
+                    # lock_file was written but rmdir() failed - clean up orphaned file
+                    if hasattr(self, 'update_lock_file') and self.update_lock_file.exists():
+                        try:
+                            self.update_lock_file.unlink()
+                        except Exception:
+                            pass
+                    QMessageBox.warning(
+                        self,
+                        t("gui_update_failed", "Update Failed"),
+                        t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(retry_error))
+                    )
+                    return
+        except Exception as lock_error:
+            # Unexpected error creating lock
+            QMessageBox.warning(
+                self,
+                t("gui_update_failed", "Update Failed"),
+                t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(lock_error))
+            )
+            return
+        
+        # Bug 1 FIX: Lock file path is already stored during creation (see above)
+        # This line is kept for clarity, but the assignment happens earlier
+        if not hasattr(self, 'update_lock_file'):
+            self.update_lock_file = lock_file
+        
+        # Check if .git exists in root - use git pull if available
+        if (root_dir / ".git").exists():
+            self.perform_git_update(root_dir)
+        else:
+            # No git repo - download ZIP and extract
+            self.perform_zip_update(root_dir)
+    
+    def perform_git_update(self, root_dir):
+        """Perform update via git pull"""
+        import subprocess
+        
+        # Create progress dialog with cancel button
+        progress = QProgressDialog(
+            t("gui_update_in_progress", "Updating script...\n\nPlease wait..."),
+            t("gui_cancel", "Cancel"),  # Cancel button
+            0, 0,  # Indeterminate progress
+            self
+        )
+        progress.setWindowTitle(t("gui_updating", "Updating"))
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)  # Show immediately
+        progress.setValue(0)
+        progress.show()
+        
+        # Track if update was cancelled
+        update_cancelled = False
+        
+        def on_cancel():
+            nonlocal update_cancelled
+            update_cancelled = True
+            progress.setLabelText(t("gui_update_cancelling", "Cancelling update..."))
+        
+        progress.canceled.connect(on_cancel)
+        
+        # Force update to show dialog
+        QApplication.processEvents()
+        
+        try:
+            # Check for cancellation before starting
+            if update_cancelled:
+                progress.close()
+                QMessageBox.information(
+                    self,
+                    t("gui_update_cancelled", "Update Cancelled"),
+                    t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
                 )
                 return
             
-            # Show progress message
-            QMessageBox.information(
-                self,
-                t("gui_updating", "Updating"),
-                t("gui_update_in_progress", "Updating script...\n\nPlease wait...")
+            # Get current commit hash before pull (locale-independent method)
+            before_hash_result = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'],
+                cwd=str(root_dir),
+                capture_output=True,
+                text=True,
+                timeout=10
             )
+            before_hash = before_hash_result.stdout.strip() if before_hash_result.returncode == 0 else None
+            
+            # MED-2: Fallback if hash check fails (e.g., detached HEAD)
+            if before_hash is None:
+                # Try to get current branch and commit
+                branch_result = subprocess.run(
+                    ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                    cwd=str(root_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if branch_result.returncode == 0:
+                    # We have a branch, but hash failed - use branch name as identifier
+                    before_hash = branch_result.stdout.strip()
             
             # Change to root directory and run git pull
+            # Check for cancellation during operation
+            if update_cancelled:
+                progress.close()
+                QMessageBox.information(
+                    self,
+                    t("gui_update_cancelled", "Update Cancelled"),
+                    t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
+                )
+                return
+            
             result = subprocess.run(
                 ['git', 'pull'],
                 cwd=str(root_dir),
@@ -1074,32 +1345,720 @@ class MainWindow(QMainWindow):
                 timeout=30
             )
             
-            if result.returncode == 0:
+            # Check for cancellation after pull
+            if update_cancelled:
+                progress.close()
+                # Git pull is idempotent, but we should inform user
                 QMessageBox.information(
                     self,
-                    t("gui_update_success", "Update Successful"),
-                    t("gui_update_success_msg", "Script updated successfully!\n\nPlease restart the application to use the new version.")
+                    t("gui_update_cancelled", "Update Cancelled"),
+                    t("gui_update_cancelled_after_pull", "Update was cancelled after git pull completed.\n\nChanges may have been applied. Please check manually.")
                 )
-                # Close application so user can restart
-                self.close()
+                return
+            
+            # Get commit hash after pull
+            after_hash_result = subprocess.run(
+                ['git', 'rev-parse', 'HEAD'],
+                cwd=str(root_dir),
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            after_hash = after_hash_result.stdout.strip() if after_hash_result.returncode == 0 else None
+            
+            # MED-2: Fallback if hash check fails
+            if after_hash is None:
+                branch_result = subprocess.run(
+                    ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                    cwd=str(root_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if branch_result.returncode == 0:
+                    after_hash = branch_result.stdout.strip()
+            
+            # Check if anything was actually updated by comparing commit hashes
+            # This is locale-independent and works regardless of git language
+            was_updated = (before_hash is not None and after_hash is not None and before_hash != after_hash)
+            
+            # MED-2: If hash comparison fails, check git pull output for changes
+            if not was_updated and result.returncode == 0 and result.stdout:
+                pull_output = result.stdout.strip()
+                # Look for indicators of changes (works in any language)
+                was_updated = any(keyword in pull_output.lower() for keyword in [
+                    "updating", "fast-forward", "merge", "changed", "insertion", "deletion"
+                ]) and "already up to date" not in pull_output.lower()
+            
+            # Close progress dialog
+            progress.close()
+            
+            # Show output in message
+            output_lines = []
+            if result.stdout:
+                output_lines.append("Output:")
+                output_lines.append(result.stdout)
+            if result.stderr:
+                output_lines.append("\nErrors:")
+                output_lines.append(result.stderr)
+            
+            output_text = "\n".join(output_lines) if output_lines else t("gui_no_output", "No output")
+            
+            if result.returncode == 0:
+                
+                success_msg = t("gui_update_success_msg", "Script updated successfully!\n\nPlease restart the application to use the new version.")
+                if output_text and output_text != t("gui_no_output", "No output"):
+                    success_msg += f"\n\n{output_text}"
+                
+                # Ask if user wants to restart now
+                if was_updated:
+                    reply = QMessageBox.question(
+                        self,
+                        t("gui_update_success", "Update Successful"),
+                        success_msg + "\n\n" + t("gui_restart_now", "Do you want to restart the application now?"),
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.Yes
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.Yes:
+                        self.restart_application()
+                    else:
+                        QMessageBox.information(
+                            self,
+                            t("gui_update_success", "Update Successful"),
+                            success_msg
+                        )
+                else:
+                    QMessageBox.information(
+                        self,
+                        t("gui_update_success", "Update Successful"),
+                        t("gui_already_up_to_date", "Script is already up to date.\n\nNo changes were made.")
+                    )
             else:
                 error_msg = result.stderr if result.stderr else result.stdout
+                if not error_msg:
+                    error_msg = t("gui_update_unknown_error", "Unknown error occurred")
+                
                 QMessageBox.warning(
                     self,
                     t("gui_update_failed", "Update Failed"),
                     t("gui_update_failed_msg", "Failed to update script:\n\n{error}\n\nPlease update manually via git pull.").format(error=error_msg)
                 )
         except subprocess.TimeoutExpired:
+            progress.close()
             QMessageBox.warning(
                 self,
                 t("gui_update_failed", "Update Failed"),
                 t("gui_update_timeout", "Update timed out. Please try again or update manually.")
             )
         except Exception as e:
+            progress.close()
             QMessageBox.warning(
                 self,
                 t("gui_update_failed", "Update Failed"),
                 t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(e))
+            )
+        finally:
+            # HIGH-1 FIX: Always cleanup lock file
+            if hasattr(self, 'update_lock_file') and self.update_lock_file.exists():
+                try:
+                    self.update_lock_file.unlink()
+                except Exception:
+                    pass
+    
+    def perform_zip_update(self, root_dir):
+        """Perform update by downloading ZIP from GitHub"""
+        import subprocess
+        import tempfile
+        import shutil
+        import zipfile
+        import time
+        import os
+        from urllib.request import urlretrieve
+        from pathlib import Path
+        
+        progress = None
+        progress_closed = False  # Track if progress dialog was closed
+        
+        try:
+            # Get latest version
+            if not self.latest_github_version:
+                QMessageBox.warning(
+                    self,
+                    t("gui_update_failed", "Update Failed"),
+                    t("gui_zip_version_check_failed", "Could not determine latest version.\n\nPlease update manually.")
+                )
+                return
+            
+            # Create progress dialog with cancel button
+            progress = QProgressDialog(
+                t("gui_downloading_update", "Downloading update...\n\nPlease wait..."),
+                t("gui_cancel", "Cancel"),  # Cancel button
+                0, 0,  # Indeterminate progress
+                self
+            )
+            progress.setWindowTitle(t("gui_updating", "Updating"))
+            progress.setWindowModality(Qt.WindowModality.WindowModal)
+            progress.setMinimumDuration(0)
+            progress.setValue(0)
+            progress.show()
+            
+            # Track if update was cancelled
+            update_cancelled = False
+            
+            def on_cancel():
+                nonlocal update_cancelled
+                update_cancelled = True
+                progress.setLabelText(t("gui_update_cancelling", "Cancelling update..."))
+            
+            # Bug 1 FIX: Connect signal handler BEFORE processEvents() to ensure
+            # cancellation clicks are handled immediately when dialog is shown
+            progress.canceled.connect(on_cancel)
+            
+            # Force update to show dialog (after signal connection)
+            QApplication.processEvents()
+            
+            # MED-1: Check network availability before downloading
+            try:
+                import socket
+                # Bug 1 FIX: Close socket after connection check to prevent resource leak
+                sock = socket.create_connection(("8.8.8.8", 53), timeout=3)
+                sock.close()
+            except (OSError, socket.error):
+                QMessageBox.warning(
+                    self,
+                    t("gui_update_failed", "Update Failed"),
+                    t("gui_no_network", "No network connection available.\n\nPlease check your internet connection and try again.")
+                )
+                progress.close()
+                return
+            
+            # Download ZIP from GitHub
+            github_repo = self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater")
+            zip_url = f"https://github.com/{github_repo}/archive/refs/heads/main.zip"
+            
+            # Create temp directory (initialize to None for cleanup tracking)
+            temp_dir = None
+            zip_file = None
+            backup_dir = None  # Track backup directory for rollback
+            old_target_dir = None  # Track old directory after atomic swap
+            
+            try:
+                # Create temp directory
+                temp_dir = Path(tempfile.mkdtemp(prefix="cachyos-updater-"))
+                zip_file = temp_dir / "update.zip"
+            except Exception as temp_error:
+                # If temp directory creation fails, show error and return
+                QMessageBox.warning(
+                    self,
+                    t("gui_update_failed", "Update Failed"),
+                    t("gui_zip_update_failed", "Failed to update via ZIP download:\n\n{error}\n\nPlease update manually from GitHub.").format(error=str(temp_error))
+                )
+                return
+            
+            try:
+                # Check for cancellation before starting download
+                if update_cancelled:
+                    progress.close()
+                    # Bug 1: Cleanup temp_dir before returning
+                    if temp_dir and temp_dir.exists():
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                    QMessageBox.information(
+                        self,
+                        t("gui_update_cancelled", "Update Cancelled"),
+                        t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
+                    )
+                    return
+                
+                # Download ZIP with retry logic (MED-1)
+                progress.setLabelText(t("gui_downloading_zip", "Downloading ZIP archive..."))
+                QApplication.processEvents()
+                
+                max_retries = 3
+                retry_count = 0
+                download_success = False
+                
+                while retry_count < max_retries and not download_success:
+                    if update_cancelled:
+                        progress.close()
+                        # Bug 1: Cleanup temp_dir before returning
+                        if temp_dir and temp_dir.exists():
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                        QMessageBox.information(
+                            self,
+                            t("gui_update_cancelled", "Update Cancelled"),
+                            t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
+                        )
+                        return
+                    
+                    try:
+                        urlretrieve(zip_url, str(zip_file))
+                        download_success = True
+                    except Exception as download_error:
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            progress.setLabelText(
+                                t("gui_download_retry", "Download failed, retrying... ({retry}/{max})").format(
+                                    retry=retry_count, max=max_retries
+                                )
+                            )
+                            QApplication.processEvents()
+                            import time
+                            time.sleep(2)  # Wait 2 seconds before retry
+                        else:
+                            raise download_error
+                
+                # Check for cancellation before extraction
+                if update_cancelled:
+                    progress.close()
+                    # Cleanup downloaded file
+                    if zip_file and zip_file.exists():
+                        zip_file.unlink()
+                    # Bug 1: Cleanup temp_dir before returning
+                    if temp_dir and temp_dir.exists():
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                    QMessageBox.information(
+                        self,
+                        t("gui_update_cancelled", "Update Cancelled"),
+                        t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
+                    )
+                    return
+                
+                # Extract ZIP
+                progress.setLabelText(t("gui_extracting_zip", "Extracting files..."))
+                QApplication.processEvents()
+                
+                extract_dir = temp_dir / "extracted"
+                with zipfile.ZipFile(str(zip_file), 'r') as zip_ref:
+                    zip_ref.extractall(str(extract_dir))
+                
+                # Check for cancellation after extraction
+                if update_cancelled:
+                    progress.close()
+                    # Cleanup extracted files
+                    if extract_dir.exists():
+                        shutil.rmtree(extract_dir, ignore_errors=True)
+                    # Bug 1: Cleanup temp_dir before returning
+                    if temp_dir and temp_dir.exists():
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                    QMessageBox.information(
+                        self,
+                        t("gui_update_cancelled", "Update Cancelled"),
+                        t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
+                    )
+                    return
+                
+                # Find the extracted directory (usually repo-name-main)
+                extracted_dirs = list(extract_dir.iterdir())
+                if not extracted_dirs:
+                    raise Exception("No files extracted from ZIP")
+                
+                source_dir = extracted_dirs[0]  # Should be sc-cachyos-multi-updater-main
+                
+                # Copy files from extracted ZIP to current directory
+                progress.setLabelText(t("gui_copying_files", "Copying files..."))
+                QApplication.processEvents()
+                
+                # Copy cachyos-multi-updater directory
+                source_project_dir = source_dir / "cachyos-multi-updater"
+                if source_project_dir.exists():
+                    target_dir = root_dir / "cachyos-multi-updater"
+                    
+                    # Bug 1 FIX: Initialize temp_target_dir before inner try block
+                    # This ensures it's always defined for exception handlers
+                    temp_target_dir = None
+                    old_target_dir = None  # Also initialize for consistency
+                    
+                    # CRIT-1: Use atomic swap instead of delete + copy to avoid file locking issues
+                    # Create new directory with temporary name first
+                    temp_target_dir = root_dir / f"cachyos-multi-updater.new.{int(time.time())}"
+                    
+                    # Backup current directory before making changes
+                    if target_dir.exists():
+                        backup_dir = root_dir / f"cachyos-multi-updater.backup.{int(time.time())}"
+                        shutil.copytree(target_dir, backup_dir, dirs_exist_ok=True)
+                    
+                    try:
+                        # Check for cancellation before copying
+                        if update_cancelled:
+                            progress.close()
+                            # Bug 2 FIX: Rollback behavior depends on whether backup exists
+                            # If backup exists: restore from backup (update scenario)
+                            # If no backup: no restoration needed (fresh installation scenario)
+                            if backup_dir and backup_dir.exists():
+                                # Update scenario: restore from backup
+                                if target_dir.exists():
+                                    shutil.rmtree(target_dir, ignore_errors=True)
+                                shutil.copytree(backup_dir, target_dir)
+                                shutil.rmtree(backup_dir, ignore_errors=True)
+                                cancel_msg = t("gui_update_cancelled_rollback", "Update was cancelled.\n\nOriginal installation has been restored.")
+                            else:
+                                # Fresh installation scenario: no backup to restore
+                                cancel_msg = t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
+                            # Bug 1: Cleanup temp_dir before returning
+                            if temp_dir and temp_dir.exists():
+                                shutil.rmtree(temp_dir, ignore_errors=True)
+                            QMessageBox.information(
+                                self,
+                                t("gui_update_cancelled", "Update Cancelled"),
+                                cancel_msg
+                            )
+                            return
+                        
+                        # Copy new files to temporary directory
+                        shutil.copytree(source_project_dir, temp_target_dir)
+                        
+                        # Check for cancellation after copying
+                        if update_cancelled:
+                            progress.close()
+                            # Rollback: restore backup if it exists
+                            if backup_dir and backup_dir.exists():
+                                if target_dir.exists():
+                                    shutil.rmtree(target_dir, ignore_errors=True)
+                                shutil.copytree(backup_dir, target_dir)
+                                shutil.rmtree(backup_dir, ignore_errors=True)
+                                cancel_msg = t("gui_update_cancelled_rollback", "Update was cancelled.\n\nOriginal installation has been restored.")
+                            else:
+                                # Fresh installation scenario: no backup to restore
+                                cancel_msg = t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
+                            # Bug 2 FIX: Always cleanup temp_target_dir regardless of backup_dir existence
+                            if temp_target_dir and temp_target_dir.exists():
+                                shutil.rmtree(temp_target_dir, ignore_errors=True)
+                            # Bug 1: Cleanup temp_dir before returning
+                            if temp_dir and temp_dir.exists():
+                                shutil.rmtree(temp_dir, ignore_errors=True)
+                            QMessageBox.information(
+                                self,
+                                t("gui_update_cancelled", "Update Cancelled"),
+                                cancel_msg
+                            )
+                            return
+                        
+                        # HIGH-2: Set correct permissions for executable files
+                        executable_files = [
+                            "update-all.sh",
+                            "setup.sh",
+                            "cachyos-update",
+                            "cachyos-update-gui",
+                            "run-update.sh"
+                        ]
+                        for exec_file in executable_files:
+                            exec_path = temp_target_dir / exec_file
+                            if exec_path.exists():
+                                os.chmod(exec_path, 0o755)
+                        
+                        # Also set permissions for scripts in subdirectories
+                        for script_dir_name in ["lib", "gui"]:
+                            script_dir_path = temp_target_dir / script_dir_name
+                            if script_dir_path.exists():
+                                for item in script_dir_path.rglob("*.sh"):
+                                    if item.is_file():
+                                        os.chmod(item, 0o755)
+                                for item in script_dir_path.rglob("*.py"):
+                                    if item.is_file():
+                                        # Python scripts should be readable and executable
+                                        os.chmod(item, 0o755)
+                        
+                        # Copy root files (README, LICENSE, etc.) to temp directory's parent
+                        # These will be copied to root_dir after atomic swap
+                        root_files_to_copy = []
+                        for item in source_dir.iterdir():
+                            if item.is_file() and item.name not in ['.gitignore', 'README.md', 'README.de.md']:
+                                # Skip files that might overwrite user configs
+                                if item.name == 'config.conf':
+                                    continue
+                                root_files_to_copy.append(item)
+                        
+                        # Check for cancellation before atomic swap
+                        if update_cancelled:
+                            progress.close()
+                            # Rollback: restore backup if it exists
+                            if backup_dir and backup_dir.exists():
+                                if target_dir.exists():
+                                    shutil.rmtree(target_dir, ignore_errors=True)
+                                shutil.copytree(backup_dir, target_dir)
+                                shutil.rmtree(backup_dir, ignore_errors=True)
+                                cancel_msg = t("gui_update_cancelled_rollback", "Update was cancelled.\n\nOriginal installation has been restored.")
+                            else:
+                                # Fresh installation scenario: no backup to restore
+                                cancel_msg = t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
+                            # Bug 2 FIX: Always cleanup temp_target_dir regardless of backup_dir existence
+                            if temp_target_dir and temp_target_dir.exists():
+                                shutil.rmtree(temp_target_dir, ignore_errors=True)
+                            # Bug 1: Cleanup temp_dir before returning
+                            if temp_dir and temp_dir.exists():
+                                shutil.rmtree(temp_dir, ignore_errors=True)
+                            QMessageBox.information(
+                                self,
+                                t("gui_update_cancelled", "Update Cancelled"),
+                                cancel_msg
+                            )
+                            return
+                        
+                        # CRIT-1: Atomic swap - rename old to temp, then new to target
+                        # This minimizes the time window where target_dir doesn't exist
+                        old_target_dir = root_dir / f"cachyos-multi-updater.old.{int(time.time())}"
+                        if target_dir.exists():
+                            target_dir.rename(old_target_dir)
+                        
+                        # Atomic move: temp -> target
+                        temp_target_dir.rename(target_dir)
+                        
+                        # Check for cancellation after swap (before cleanup)
+                        if update_cancelled:
+                            progress.close()
+                            # Bug 2 FIX: Rollback behavior depends on whether backup exists
+                            # If backup exists: restore from backup (update scenario)
+                            # If no backup: remove new installation (fresh installation scenario)
+                            if backup_dir and backup_dir.exists():
+                                # Update scenario: restore from backup
+                                if target_dir.exists():
+                                    target_dir.rename(root_dir / f"cachyos-multi-updater.cancelled.{int(time.time())}")
+                                shutil.copytree(backup_dir, target_dir)
+                                shutil.rmtree(backup_dir, ignore_errors=True)
+                                cancel_msg = t("gui_update_cancelled_rollback", "Update was cancelled.\n\nOriginal installation has been restored.")
+                            else:
+                                # Fresh installation scenario: remove incomplete installation
+                                if target_dir.exists():
+                                    shutil.rmtree(target_dir, ignore_errors=True)
+                                cancel_msg = t("gui_update_cancelled_msg", "Update was cancelled. No changes were made.")
+                            # Bug 2: Cleanup old_target_dir before returning
+                            if old_target_dir and old_target_dir.exists():
+                                shutil.rmtree(old_target_dir, ignore_errors=True)
+                            # Bug 1: Cleanup temp_dir before returning
+                            if temp_dir and temp_dir.exists():
+                                shutil.rmtree(temp_dir, ignore_errors=True)
+                            QMessageBox.information(
+                                self,
+                                t("gui_update_cancelled", "Update Cancelled"),
+                                cancel_msg
+                            )
+                            return
+                        
+                        # Copy root files after successful swap
+                        for item in root_files_to_copy:
+                            shutil.copy2(item, root_dir / item.name)
+                            # HIGH-2: Set permissions for root executable files
+                            if item.name in executable_files:
+                                os.chmod(root_dir / item.name, 0o755)
+                        
+                        # Remove old directory after successful swap
+                        if old_target_dir and old_target_dir.exists():
+                            shutil.rmtree(old_target_dir, ignore_errors=True)
+                        
+                        # HIGH-1: Verify installation is complete - check critical files
+                        critical_files = [
+                            "update-all.sh",
+                            "gui/main.py",
+                            "gui/window.py",
+                            "lib/i18n.sh"
+                        ]
+                        missing_files = []
+                        for critical_file in critical_files:
+                            if not (target_dir / critical_file).exists():
+                                missing_files.append(critical_file)
+                        
+                        if missing_files:
+                            raise Exception(f"Installation verification failed: Missing critical files: {', '.join(missing_files)}")
+                        
+                    except Exception as copy_error:
+                        # Rollback: restore backup if it exists
+                        if backup_dir and backup_dir.exists():
+                            # Remove broken/incomplete installation
+                            if target_dir.exists():
+                                shutil.rmtree(target_dir, ignore_errors=True)
+                            # Bug 1 FIX: Check if temp_target_dir is defined before accessing it
+                            if temp_target_dir and temp_target_dir.exists():
+                                shutil.rmtree(temp_target_dir, ignore_errors=True)
+                            # Bug 1: Check if old_target_dir exists before accessing it
+                            if old_target_dir and old_target_dir.exists():
+                                shutil.rmtree(old_target_dir, ignore_errors=True)
+                            # Restore from backup
+                            shutil.copytree(backup_dir, target_dir)
+                        raise copy_error
+                    
+                    # Cleanup backup only after successful installation
+                    if backup_dir and backup_dir.exists():
+                        shutil.rmtree(backup_dir)
+                        backup_dir = None
+                    
+                    # HIGH-3: Cleanup old backup directories (keep max 3, remove older than 7 days)
+                    import glob
+                    backup_pattern = str(root_dir / "cachyos-multi-updater.backup.*")
+                    backup_dirs = sorted(glob.glob(backup_pattern), reverse=True)
+                    current_time = time.time()
+                    seven_days_ago = current_time - (7 * 24 * 60 * 60)
+                    
+                    # Remove backups older than 7 days
+                    for backup_path_str in backup_dirs:
+                        backup_path = Path(backup_path_str)
+                        try:
+                            backup_time = backup_path.stat().st_mtime
+                            if backup_time < seven_days_ago:
+                                shutil.rmtree(backup_path, ignore_errors=True)
+                        except Exception:
+                            pass
+                    
+                    # Keep only the 3 most recent backups
+                    remaining_backups = sorted([Path(p) for p in glob.glob(backup_pattern) if Path(p).exists()], 
+                                               key=lambda p: p.stat().st_mtime, reverse=True)
+                    for old_backup in remaining_backups[3:]:  # Keep first 3, remove rest
+                        shutil.rmtree(old_backup, ignore_errors=True)
+                else:
+                    raise Exception("cachyos-multi-updater directory not found in ZIP")
+                
+                # Cleanup temp files
+                progress.close()
+                progress_closed = True
+                shutil.rmtree(temp_dir)
+                
+                # Success
+                QMessageBox.information(
+                    self,
+                    t("gui_update_success", "Update Successful"),
+                    t("gui_update_success_msg", "Script updated successfully!\n\nPlease restart the application to use the new version.")
+                )
+                
+                # Ask if user wants to restart
+                reply = QMessageBox.question(
+                    self,
+                    t("gui_update_success", "Update Successful"),
+                    t("gui_restart_now", "Do you want to restart the application now?"),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.restart_application()
+                    
+            except Exception as e:
+                # Close progress dialog only if not already closed
+                if not progress_closed:
+                    progress.close()
+                    progress_closed = True
+                
+                # Rollback: restore backup if installation was partially completed
+                target_dir = root_dir / "cachyos-multi-updater"
+                if backup_dir and backup_dir.exists():
+                    try:
+                        # Check if target is missing or incomplete
+                        needs_restore = (
+                            not target_dir.exists() or
+                            not (target_dir / "update-all.sh").exists()
+                        )
+                        
+                        if needs_restore:
+                            # Remove incomplete/broken installation
+                            if target_dir.exists():
+                                shutil.rmtree(target_dir, ignore_errors=True)
+                            # Restore from backup
+                            shutil.copytree(backup_dir, target_dir)
+                            # Bug 2 FIX: Cleanup backup after successful restore
+                            # Use ignore_errors=True to ensure backup_dir is set to None even if cleanup fails
+                            shutil.rmtree(backup_dir, ignore_errors=True)
+                            backup_dir = None
+                    except Exception as restore_error:
+                        # If restore fails, at least keep the backup for manual recovery
+                        # Bug 2 FIX: Ensure backup_dir is set to None even if restore fails
+                        # This prevents orphaned backup directories
+                        try:
+                            if backup_dir and backup_dir.exists():
+                                shutil.rmtree(backup_dir, ignore_errors=True)
+                        except Exception:
+                            pass
+                        backup_dir = None
+                        pass
+                
+                # Bug 2: Cleanup temp_dir and old_target_dir
+                if temp_dir and temp_dir.exists():
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                if old_target_dir and old_target_dir.exists():
+                    shutil.rmtree(old_target_dir, ignore_errors=True)
+                
+                raise
+                
+        except Exception as e:
+            # Cleanup progress dialog if it exists and wasn't already closed
+            if progress is not None and not progress_closed:
+                progress.close()
+            
+            # Cleanup temp directory if it was created but error occurred before inner try block
+            if temp_dir is not None and temp_dir.exists():
+                try:
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
+                    pass  # Ignore cleanup errors
+            
+            # Show error message
+            QMessageBox.warning(
+                self,
+                t("gui_update_failed", "Update Failed"),
+                t("gui_zip_update_failed", "Failed to update via ZIP download:\n\n{error}\n\nPlease update manually from GitHub.").format(error=str(e))
+            )
+        finally:
+            # HIGH-1 FIX: Always cleanup lock file
+            if hasattr(self, 'update_lock_file') and self.update_lock_file.exists():
+                try:
+                    self.update_lock_file.unlink()
+                except Exception:
+                    pass
+    
+    def restart_application(self):
+        """Restart the application"""
+        import subprocess
+        import sys
+        import os
+        
+        try:
+            # Get the script path that started this application
+            # Try to find cachyos-update-gui in parent directory
+            root_dir = self.script_dir.parent
+            launcher_script = root_dir / "cachyos-update-gui"
+            
+            new_process = None
+            if launcher_script.exists():
+                # Use launcher script
+                new_process = subprocess.Popen([str(launcher_script)], cwd=str(root_dir))
+            else:
+                # Fallback: use gui/main.py directly
+                gui_script = self.script_dir / "gui" / "main.py"
+                if gui_script.exists():
+                    new_process = subprocess.Popen(['python3', str(gui_script)], cwd=str(self.script_dir))
+                else:
+                    QMessageBox.warning(
+                        self,
+                        t("gui_restart_failed", "Restart Failed"),
+                        t("gui_restart_manual", "Could not restart automatically.\n\nPlease restart the application manually.")
+                    )
+                    return
+            
+            # Bug 3: Verify new process was spawned successfully before quitting
+            # new_process is guaranteed to be a Popen object here because:
+            # - If launcher_script exists: new_process = subprocess.Popen(...)
+            # - Else if gui_script exists: new_process = subprocess.Popen(...)
+            # - Else: return (early exit, never reaches this point)
+            # subprocess.Popen() either returns a Popen object or raises an exception
+            if new_process.poll() is None:
+                # Process is running - safe to quit
+                app = QApplication.instance()
+                if app is not None:
+                    app.quit()
+                else:
+                    # Fallback: sys.exit if no QApplication instance
+                    import sys
+                    sys.exit(0)
+            else:
+                # Process failed to start (exited immediately)
+                QMessageBox.warning(
+                    self,
+                    t("gui_restart_failed", "Restart Failed"),
+                    t("gui_restart_error", "Error restarting application:\n\nFailed to start new process.\n\nPlease restart manually.")
+                )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                t("gui_restart_failed", "Restart Failed"),
+                t("gui_restart_error", "Error restarting application:\n\n{error}\n\nPlease restart manually.").format(error=str(e))
             )
     
     def _on_language_label_clicked(self, event):

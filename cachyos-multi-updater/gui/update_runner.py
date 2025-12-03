@@ -61,36 +61,33 @@ class UpdateRunner(QObject):
         env["ENABLE_ADGUARD_UPDATE"] = str(self.config.get("ENABLE_ADGUARD_UPDATE", "true")).lower()
         env["ENABLE_FLATPAK_UPDATE"] = str(self.config.get("ENABLE_FLATPAK_UPDATE", "true")).lower()
         
-        # Store sudo password for later use
-        self.sudo_password = sudo_password
+        # Bug 1 FIX: Do NOT store password as instance variable (security risk)
+        # Password is only used locally in this method and should not persist in memory
+        # Use the local parameter directly instead of self.sudo_password
         
-        # If sudo password provided, create wrapper script
+        # CRIT-2 FIX: Create minimal wrapper script that receives password via stdin
+        # Password is NOT stored in the script file - it's passed via stdin to the wrapper
+        # This eliminates the security risk of storing password in a file
         temp_script_path = None
         if sudo_password and not dry_run:
             import tempfile
             import stat
             try:
+                # Create minimal wrapper script that reads password from stdin
+                # Password is NOT written to the script file - only passed via stdin
                 temp_script = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.sh')
-                # Escape password for bash (complete escaping for all special characters)
-                # Order matters: backslash must be escaped first!
-                escaped_password = (sudo_password
-                    .replace('\\', '\\\\')  # Backslash first!
-                    .replace('"', '\\"')
-                    .replace('$', '\\$')
-                    .replace('`', '\\`')
-                    .replace('\n', '\\n')
-                    .replace('\r', '\\r')
-                    .replace("'", "\\'"))
                 temp_script.write(f'''#!/bin/bash
 set -euo pipefail
-# Validate sudo with password
-echo "{escaped_password}" | sudo -S -v || exit 1
-# Run the actual script
+# Read password from stdin (passed by QProcess)
+read -r SUDO_PASSWORD
+# Validate sudo with password from stdin
+echo "$SUDO_PASSWORD" | sudo -S -v || exit 1
+# Run the actual script (password already validated, sudo session active)
 exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
 ''')
                 temp_script.close()
                 temp_script_path = temp_script.name
-                os.chmod(temp_script_path, stat.S_IRWXU)
+                os.chmod(temp_script_path, stat.S_IRWXU)  # 0o700 - only user can read/execute
                 # Store temp script path IMMEDIATELY for cleanup
                 self.temp_script_path = temp_script_path
                 cmd = ["bash", temp_script_path]
@@ -103,6 +100,8 @@ exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
                         pass
                 self.error_occurred.emit(t("gui_sudo_wrapper_failed", "Failed to create sudo wrapper script: {error}").format(error=str(e)))
                 return
+        else:
+            self.temp_script_path = None
         
         # Create process
         self.process = QProcess()
@@ -186,6 +185,44 @@ exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
             self.process.deleteLater()
             self.process = None
             return
+        else:
+            # Bug 1 FIX: Process started successfully - write password to stdin if needed
+            # This must happen AFTER waitForStarted succeeds, regardless of which check passed
+            # If we don't write the password, the subprocess will hang on 'read -r SUDO_PASSWORD'
+            if sudo_password and not dry_run:
+                # Write password to stdin (followed by newline for 'read' command)
+                password_bytes = (sudo_password + '\n').encode('utf-8')
+                bytes_written = self.process.write(password_bytes)
+                
+                # Bug 1 FIX: Verify write succeeded before closing channel
+                # QProcess.write() returns number of bytes written, or -1 on error
+                if bytes_written != len(password_bytes):
+                    # Write failed - subprocess will hang waiting for input
+                    # Bug 1 FIX: Format error message with actual error details
+                    error_detail = f"Expected {len(password_bytes)} bytes, but only {bytes_written} bytes were written"
+                    error_msg = t("gui_process_write_error", "Write error: {error}").format(error=error_detail)
+                    # Cleanup temp script
+                    if self.temp_script_path and os.path.exists(self.temp_script_path):
+                        try:
+                            os.unlink(self.temp_script_path)
+                        except Exception:
+                            pass
+                        self.temp_script_path = None
+                    self.error_occurred.emit(error_msg)
+                    self.process.kill()
+                    self.process.waitForFinished(1000)
+                    self.process.deleteLater()
+                    self.process = None
+                    return
+                
+                # Close write channel to signal EOF to subprocess
+                # The wrapper script uses 'read -r SUDO_PASSWORD' which blocks until EOF
+                self.process.closeWriteChannel()
+                # Clear password from memory immediately after writing
+                # Note: Python strings are immutable, but we can't guarantee memory clearing
+                # This is the best we can do without using secure memory libraries
+                del password_bytes
+            # Process started successfully, continue with normal execution
     
     def stop_update(self):
         """Stop the update process"""

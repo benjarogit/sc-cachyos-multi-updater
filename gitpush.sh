@@ -59,7 +59,7 @@ git status --short
 echo ""
 
 # Ask for commit message
-if [ -z "$1" ]; then
+if [ -z "${1:-}" ]; then
     echo -e "${YELLOW}Commit-Message (leer = automatisch):${NC}"
     read -r COMMIT_MESSAGE
 else
