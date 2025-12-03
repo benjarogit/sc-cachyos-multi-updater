@@ -17,8 +17,7 @@ if str(gui_dir) not in sys.path:
     sys.path.insert(0, str(gui_dir))
 
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from PyQt6.QtCore import Qt
-from PyQt6.QtCore import qInstallMessageHandler
+from PyQt6.QtCore import Qt, QtMsgType, qInstallMessageHandler
 
 # Initialize i18n before importing window
 from i18n import init_i18n
