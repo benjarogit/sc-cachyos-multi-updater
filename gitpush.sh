@@ -105,16 +105,62 @@ echo -e "${GREEN}✓ Pushed to remote${NC}\n"
 # Dies ermöglicht Simulation von Tool-Updates (Update-Check findet höhere Version)
 echo -e "${CYAN}Lokale Version: ${VERSION}${NC}"
 
-# Calculate suggested release version (local version + 1 patch)
-# Extract version parts
-IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
-MAJOR="${VERSION_PARTS[0]}"
-MINOR="${VERSION_PARTS[1]}"
-PATCH="${VERSION_PARTS[2]}"
+# Get latest GitHub release version
+LATEST_GITHUB_VERSION=""
+if command -v gh &> /dev/null; then
+    # Bug 1 FIX: Use jq -r for raw output (without quotes) so sed can properly remove 'v' prefix
+    # Bug 1 FIX: Check for "null" output from jq when no releases exist
+    TEMP_VERSION=$(gh release list --limit 1 --json tagName 2>/dev/null | jq -r '.[0].tagName // empty' 2>/dev/null || echo "")
+    if [ -n "$TEMP_VERSION" ] && [ "$TEMP_VERSION" != "null" ]; then
+        LATEST_GITHUB_VERSION=$(echo "$TEMP_VERSION" | sed 's/^v//')
+    fi
+fi
 
-# Increment patch version
-PATCH=$((PATCH + 1))
-SUGGESTED_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+# Fallback: Try to get from GitHub API if gh CLI fails
+if [ -z "$LATEST_GITHUB_VERSION" ]; then
+    LATEST_GITHUB_VERSION=$(curl -s "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep -oP '"tag_name":\s*"v?\K[0-9.]+' | head -1 || echo "")
+fi
+
+# Calculate suggested release version
+if [ -n "$LATEST_GITHUB_VERSION" ]; then
+    # Use latest GitHub version + 1 patch
+    echo -e "${CYAN}Neueste GitHub-Version: ${LATEST_GITHUB_VERSION}${NC}"
+    # Bug 1 FIX: Save original IFS and restore it after parsing
+    OLD_IFS="$IFS"
+    IFS='.' read -ra VERSION_PARTS <<< "$LATEST_GITHUB_VERSION"
+    IFS="$OLD_IFS"
+    # Bug 1 FIX: Validate that at least MAJOR is present BEFORE applying defaults
+    # Check if version is empty or starts with dot (invalid format)
+    if [ ${#VERSION_PARTS[@]} -eq 0 ] || [ -z "${VERSION_PARTS[0]}" ]; then
+        echo -e "${RED}❌ Fehler: Ungültige Versionsnummer: ${LATEST_GITHUB_VERSION}${NC}"
+        exit 1
+    fi
+    # Apply defaults for missing MINOR and PATCH parts only
+    MAJOR="${VERSION_PARTS[0]}"
+    MINOR="${VERSION_PARTS[1]:-0}"
+    PATCH="${VERSION_PARTS[2]:-0}"
+    PATCH=$((PATCH + 1))
+    SUGGESTED_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+else
+    # Fallback: Use local version + 1 patch if GitHub version cannot be determined
+    echo -e "${YELLOW}⚠ Konnte neueste GitHub-Version nicht ermitteln${NC}"
+    # Bug 1 FIX: Save original IFS and restore it after parsing
+    OLD_IFS="$IFS"
+    IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
+    IFS="$OLD_IFS"
+    # Bug 1 FIX: Validate that at least MAJOR is present BEFORE applying defaults
+    # Check if version is empty or starts with dot (invalid format)
+    if [ ${#VERSION_PARTS[@]} -eq 0 ] || [ -z "${VERSION_PARTS[0]}" ]; then
+        echo -e "${RED}❌ Fehler: Ungültige Versionsnummer: ${VERSION}${NC}"
+        exit 1
+    fi
+    # Apply defaults for missing MINOR and PATCH parts only
+    MAJOR="${VERSION_PARTS[0]}"
+    MINOR="${VERSION_PARTS[1]:-0}"
+    PATCH="${VERSION_PARTS[2]:-0}"
+    PATCH=$((PATCH + 1))
+    SUGGESTED_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+fi
 
 echo -e "${CYAN}Vorgeschlagene Release-Version: ${SUGGESTED_VERSION}${NC}"
 echo -e "${YELLOW}Release-Version (Enter = ${SUGGESTED_VERSION}, oder eigene Version):${NC}"
@@ -130,14 +176,64 @@ if [ "$(printf '%s\n' "$VERSION" "$RELEASE_VERSION" | sort -V | head -n1)" = "$R
     echo -e "${YELLOW}   Regel: Lokale Version sollte immer unter GitHub-Version sein!${NC}"
 fi
 
+# Warn if release version is lower or equal to latest GitHub version
+if [ -n "$LATEST_GITHUB_VERSION" ]; then
+    if [ "$(printf '%s\n' "$LATEST_GITHUB_VERSION" "$RELEASE_VERSION" | sort -V | head -n1)" = "$RELEASE_VERSION" ] && [ "$LATEST_GITHUB_VERSION" != "$RELEASE_VERSION" ]; then
+        echo -e "${YELLOW}⚠ Warnung: Release-Version (${RELEASE_VERSION}) ist niedriger als neueste GitHub-Version (${LATEST_GITHUB_VERSION})${NC}"
+        echo -e "${YELLOW}   Es sollte eine höhere Version erstellt werden!${NC}"
+    fi
+fi
+
 # Create release tag
 TAG_NAME="v${RELEASE_VERSION}"
 echo -e "${YELLOW}[4/6] Creating release tag...${NC}"
+
+# Bug 1 FIX: Get previous tag BEFORE creating new tag
+# This ensures we get the correct previous release for changelog generation
+# We need to find the tag that comes BEFORE TAG_NAME in the sorted list
+# This handles the case where TAG_NAME already exists
+PREVIOUS_TAG=""
+ALL_TAGS=($(git tag -l "v*" | sort -V))
+if [ ${#ALL_TAGS[@]} -gt 0 ]; then
+    # Find the index of TAG_NAME in the sorted list
+    for i in "${!ALL_TAGS[@]}"; do
+        if [ "${ALL_TAGS[$i]}" = "$TAG_NAME" ]; then
+            # If TAG_NAME exists and is not the first tag, get the previous one
+            if [ $i -gt 0 ]; then
+                PREVIOUS_TAG="${ALL_TAGS[$((i-1))]}"
+            fi
+            break
+        elif [ "$(printf '%s\n' "${ALL_TAGS[$i]}" "$TAG_NAME" | sort -V | head -n1)" = "$TAG_NAME" ]; then
+            # TAG_NAME would be inserted at position i, so previous tag is at i-1
+            if [ $i -gt 0 ]; then
+                PREVIOUS_TAG="${ALL_TAGS[$((i-1))]}"
+            fi
+            break
+        fi
+    done
+    # If TAG_NAME not found and no previous tag set, use the last tag
+    if [ -z "$PREVIOUS_TAG" ] && [ ${#ALL_TAGS[@]} -gt 0 ]; then
+        # Check if TAG_NAME would be after all existing tags
+        LAST_TAG="${ALL_TAGS[-1]}"
+        if [ "$(printf '%s\n' "$LAST_TAG" "$TAG_NAME" | sort -V | head -n1)" = "$LAST_TAG" ]; then
+            PREVIOUS_TAG="$LAST_TAG"
+        fi
+    fi
+fi
 
 # Check if tag already exists
 if git rev-parse "${TAG_NAME}" >/dev/null 2>&1; then
     echo -e "${YELLOW}⚠ Tag ${TAG_NAME} existiert bereits${NC}"
     echo -e "${YELLOW}   Überspringe Tag-Erstellung${NC}"
+    # Check if release already exists on GitHub
+    if command -v gh &> /dev/null; then
+        if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            echo -e "${YELLOW}⚠ Release ${TAG_NAME} existiert bereits auf GitHub${NC}"
+            echo -e "${YELLOW}   Bitte eine höhere Version verwenden!${NC}"
+            echo -e "${RED}❌ Abgebrochen: Release-Version existiert bereits${NC}"
+            exit 1
+        fi
+    fi
 else
     # Create annotated tag
     git tag -a "${TAG_NAME}" -m "Version ${RELEASE_VERSION} - ${DATE}"
@@ -166,9 +262,41 @@ if command -v gh &> /dev/null; then
     if [ -n "$CHANGELOG_FILE" ] && [ -f "$CHANGELOG_FILE" ]; then
         RELEASE_NOTES=$(cat "$CHANGELOG_FILE")
     else
-        RELEASE_NOTES="Version ${RELEASE_VERSION} - ${DATE}
+        # Bug 1 FIX: Use PREVIOUS_TAG that was captured BEFORE creating the new tag
+        # Generate changelog from git commits since last release (ALWAYS IN ENGLISH)
+        if [ -n "$PREVIOUS_TAG" ]; then
+            # Bug 1 FIX: Use TAG_NAME as range end if tag already exists, otherwise use HEAD
+            # This ensures changelog only includes commits that belong to this specific release
+            # If tag exists but is not at HEAD, using HEAD would include commits beyond the release
+            if git rev-parse "${TAG_NAME}" >/dev/null 2>&1; then
+                # Tag exists - use it as range end to get commits up to this tag only
+                COMMITS=$(git log "${PREVIOUS_TAG}..${TAG_NAME}" --pretty=format:"- %s" 2>/dev/null || echo "")
+            else
+                # Tag doesn't exist yet - use HEAD (will be created after this)
+                COMMITS=$(git log "${PREVIOUS_TAG}..HEAD" --pretty=format:"- %s" 2>/dev/null || echo "")
+            fi
+            if [ -n "$COMMITS" ]; then
+                RELEASE_NOTES="## Version ${RELEASE_VERSION} - ${DATE}
+
+### Changes
+
+${COMMITS}
+
+---
+*Full changelog: https://github.com/${REPO}/compare/${PREVIOUS_TAG}...${TAG_NAME}*"
+            else
+                RELEASE_NOTES="## Version ${RELEASE_VERSION} - ${DATE}
+
+No changes since ${PREVIOUS_TAG}."
+            fi
+        else
+            # No previous tags - use default message
+            RELEASE_NOTES="## Version ${RELEASE_VERSION} - ${DATE}
+
+Initial release.
 
 See GitHub Releases for full changelog."
+        fi
     fi
     
     # Check if release already exists
