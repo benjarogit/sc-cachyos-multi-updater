@@ -208,9 +208,13 @@ class ConfigDialog(QDialog):
         self.icon_preview.setStyleSheet("border: 1px solid #ccc; background-color: #f0f0f0;")
         self.icon_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # Don't set text - it will be set by update_icon_preview() or show pixmap
-        self.update_icon_preview()
-        self.desktop_icon.currentIndexChanged.connect(self.update_icon_preview)
+        # Connect signals (update_icon_preview is called from on_icon_selection_changed, so no duplicate)
         self.custom_icon_path.textChanged.connect(self.update_icon_preview)
+        # Initial preview update
+        try:
+            self.update_icon_preview()
+        except Exception:
+            pass  # Ignore errors during initialization
         
         preview_layout = QHBoxLayout()
         preview_layout.addWidget(preview_label)
@@ -923,13 +927,18 @@ class ConfigDialog(QDialog):
     
     def on_icon_selection_changed(self, index):
         """Handle icon selection change"""
-        icon_data = self.desktop_icon.itemData(index)
-        if icon_data == "custom":
-            self.custom_icon_path.setVisible(True)
-            self.icon_browse_btn.setVisible(True)
-        else:
-            self.custom_icon_path.setVisible(False)
-            self.icon_browse_btn.setVisible(False)
+        try:
+            icon_data = self.desktop_icon.itemData(index)
+            if icon_data == "custom":
+                self.custom_icon_path.setVisible(True)
+                self.icon_browse_btn.setVisible(True)
+            else:
+                self.custom_icon_path.setVisible(False)
+                self.icon_browse_btn.setVisible(False)
+            # Update preview
+            self.update_icon_preview()
+        except Exception:
+            pass  # Ignore errors
     
     def browse_icon_file(self):
         """Browse for custom icon file"""
@@ -1004,30 +1013,35 @@ class ConfigDialog(QDialog):
     
     def create_desktop_shortcut(self):
         """Create desktop shortcut"""
-        script_dir = Path(self.script_dir)
-        script_path = script_dir / "update-all.sh"
-        
-        if not script_path.exists():
-            QMessageBox.critical(
-                self,
-                t("gui_error", "Error"),
-                t("gui_script_not_found", "update-all.sh not found!")
-            )
-            return
-        
-        # Get icon
-        icon_data = self.desktop_icon.itemData(self.desktop_icon.currentIndex())
-        if icon_data == "custom":
-            icon_value = self.custom_icon_path.text()
-            if not icon_value or not os.path.exists(icon_value):
-                QMessageBox.warning(
+        try:
+            script_dir = Path(self.script_dir)
+            script_path = script_dir / "update-all.sh"
+            
+            if not script_path.exists():
+                QMessageBox.critical(
                     self,
                     t("gui_error", "Error"),
-                    t("gui_icon_not_found", "Please select a valid icon file!")
+                    t("gui_script_not_found", "update-all.sh not found!")
                 )
                 return
-        else:
-            icon_value = icon_data if icon_data else "system-software-update"
+            
+            # Get icon
+            try:
+                icon_data = self.desktop_icon.itemData(self.desktop_icon.currentIndex())
+            except Exception:
+                icon_data = "system-software-update"  # Fallback
+            
+            if icon_data == "custom":
+                icon_value = self.custom_icon_path.text()
+                if not icon_value or not os.path.exists(icon_value):
+                    QMessageBox.warning(
+                        self,
+                        t("gui_error", "Error"),
+                        t("gui_icon_not_found", "Please select a valid icon file!")
+                    )
+                    return
+            else:
+                icon_value = icon_data if icon_data else "system-software-update"
         
         # Determine target directories
         app_dir = Path.home() / ".local" / "share" / "applications"
