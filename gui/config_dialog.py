@@ -8,7 +8,7 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QSpinBox,
     QPushButton, QGroupBox, QLineEdit, QFileDialog, QComboBox, QTextEdit,
-    QTabWidget, QWidget, QFormLayout, QMessageBox
+    QTabWidget, QWidget, QFormLayout, QMessageBox, QRadioButton
 )
 from PyQt6.QtCore import Qt, QStandardPaths
 from PyQt6.QtGui import QIcon, QPixmap, QFont
