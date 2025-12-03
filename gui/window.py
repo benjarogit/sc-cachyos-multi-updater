@@ -53,6 +53,8 @@ class MainWindow(QMainWindow):
         self.spinner_frame = 0
         self.version_checker = None
         self.latest_version = None
+        self.latest_github_version = None
+        self.version_thread = None
         
         self.setWindowTitle(t("app_name", "CachyOS Multi-Updater"))
         self.setMinimumWidth(800)
@@ -793,7 +795,8 @@ class MainWindow(QMainWindow):
                 return
         
         github_repo = self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater")
-        self.version_checker = VersionChecker(str(self.script_dir), github_repo)
+        if not hasattr(self, 'version_checker') or self.version_checker is None:
+            self.version_checker = VersionChecker(str(self.script_dir), github_repo)
         
         # Check in background thread to avoid blocking UI
         class VersionCheckThread(QThread):
@@ -822,6 +825,59 @@ class MainWindow(QMainWindow):
         if latest_version:
             self.latest_github_version = latest_version
             self.update_version_label()
+    
+    def check_version_manual(self):
+        """Manually check for version updates"""
+        self.version_label.setText(f"v{self.script_version} (Lokal) - {t('gui_checking', 'Checking...')}")
+        self.version_label.setStyleSheet("color: #666;")
+        self.check_version_async()
+    
+    def update_version_label(self):
+        """Update version label with GitHub version"""
+        if not hasattr(self, 'version_label'):
+            return
+        
+        if not hasattr(self, 'latest_github_version'):
+            self.latest_github_version = None
+        
+        if self.latest_github_version:
+            if self.latest_github_version == "error":
+                self.version_label.setText(f"v{self.script_version} (Lokal)")
+                self.version_label.setStyleSheet("color: #666;")
+                self.version_label.setToolTip(t("gui_version_check_failed", "Version check failed"))
+            else:
+                # Compare versions (simple string comparison for now)
+                try:
+                    local_parts = [int(x) for x in self.script_version.split('.')]
+                    github_parts = [int(x) for x in self.latest_github_version.split('.')]
+                    
+                    if github_parts > local_parts:
+                        # Update available - RED
+                        self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
+                        self.version_label.setStyleSheet("color: #dc3545; cursor: pointer; font-weight: bold;")
+                        self.version_label.setToolTip(t("gui_update_available", "Update available! Click to download."))
+                        self.version_label.mousePressEvent = lambda e: self.open_github_releases()
+                    elif github_parts == local_parts:
+                        # Up to date - GREEN
+                        self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
+                        self.version_label.setStyleSheet("color: #28a745; cursor: pointer;")
+                        self.version_label.setToolTip(t("gui_version_up_to_date", "Version is up to date"))
+                        self.version_label.mousePressEvent = lambda e: self.check_version_manual()
+                    else:
+                        # Local is newer (shouldn't happen) - GREEN
+                        self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
+                        self.version_label.setStyleSheet("color: #28a745; cursor: pointer;")
+                        self.version_label.setToolTip(t("gui_version_up_to_date", "Version is up to date"))
+                        self.version_label.mousePressEvent = lambda e: self.check_version_manual()
+                except Exception as e:
+                    self.version_label.setText(f"v{self.script_version} (Lokal)")
+                    self.version_label.setStyleSheet("color: #666;")
+                    self.version_label.setToolTip(f"Error: {e}")
+        else:
+            self.version_label.setText(f"v{self.script_version} (Lokal)")
+            self.version_label.setStyleSheet("color: #666;")
+            self.version_label.setToolTip(t("gui_version_check_tooltip", "Click to check for updates"))
+            self.version_label.mousePressEvent = lambda e: self.check_version_manual()
     
     def download_update(self):
         """Open download page for update"""
