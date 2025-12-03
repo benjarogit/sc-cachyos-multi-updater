@@ -1079,7 +1079,7 @@ class ConfigDialog(QDialog):
             
             # Determine target directories
             app_dir = Path.home() / ".local" / "share" / "applications"
-        desktop_dir = None
+            desktop_dir = None
         
         # Try to find desktop directory
         desktop_paths = [
