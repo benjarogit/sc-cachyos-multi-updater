@@ -45,6 +45,16 @@ def get_script_dir():
 
 def main():
     """Main entry point"""
+    # Suppress Qt QDBus warnings
+    def qt_message_handler(msg_type, context, message):
+        # Filter out QDBus warnings
+        if "QDBusError" in message or "qt.qpa.services" in message:
+            return
+        # Print other messages normally (optional, can be removed)
+        # print(message)
+    
+    qInstallMessageHandler(qt_message_handler)
+    
     # Enable high DPI scaling
     QApplication.setHighDpiScaleFactorRoundingPolicy(
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
