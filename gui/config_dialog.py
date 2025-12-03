@@ -1080,51 +1080,51 @@ class ConfigDialog(QDialog):
             # Determine target directories
             app_dir = Path.home() / ".local" / "share" / "applications"
             desktop_dir = None
-        
-        # Try to find desktop directory
-        desktop_paths = [
-            Path.home() / "Desktop",
-            Path.home() / "Schreibtisch",
-            Path.home() / "desktop",
-        ]
-        for path in desktop_paths:
-            if path.exists() and path.is_dir():
-                desktop_dir = path
-                break
-        
-        # Create directories if needed
-        app_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Create desktop entry content
-        script_abs_path = script_path.absolute()
-        
-        # Determine which version to use (Console or GUI)
-        use_gui = self.shortcut_version_gui.isChecked()
-        
-        if use_gui:
-            # GUI version
-            gui_script = script_dir / "gui" / "main.py"
-            if gui_script.exists():
-                exec_cmd = f'python3 "{gui_script.absolute()}"'
-                terminal = "false"
-            else:
-                QMessageBox.warning(
-                    self,
-                    t("gui_error", "Error"),
-                    t("gui_gui_not_found", "GUI script not found! Using console version instead.")
-                )
-                use_gui = False
-        
-        if not use_gui:
-            # Console version
-            wrapper_script = script_dir / "run-update.sh"
-            if wrapper_script.exists():
-                exec_cmd = f'konsole --hold -e "{wrapper_script.absolute()}"'
-            else:
-                exec_cmd = f'konsole --hold -e "bash \\"{script_abs_path}\\""'
-            terminal = "true"
-        
-        desktop_entry = f"""[Desktop Entry]
+            
+            # Try to find desktop directory
+            desktop_paths = [
+                Path.home() / "Desktop",
+                Path.home() / "Schreibtisch",
+                Path.home() / "desktop",
+            ]
+            for path in desktop_paths:
+                if path.exists() and path.is_dir():
+                    desktop_dir = path
+                    break
+            
+            # Create directories if needed
+            app_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Create desktop entry content
+            script_abs_path = script_path.absolute()
+            
+            # Determine which version to use (Console or GUI)
+            use_gui = self.shortcut_version_gui.isChecked()
+            
+            if use_gui:
+                # GUI version
+                gui_script = script_dir / "gui" / "main.py"
+                if gui_script.exists():
+                    exec_cmd = f'python3 "{gui_script.absolute()}"'
+                    terminal = "false"
+                else:
+                    QMessageBox.warning(
+                        self,
+                        t("gui_error", "Error"),
+                        t("gui_gui_not_found", "GUI script not found! Using console version instead.")
+                    )
+                    use_gui = False
+            
+            if not use_gui:
+                # Console version
+                wrapper_script = script_dir / "run-update.sh"
+                if wrapper_script.exists():
+                    exec_cmd = f'konsole --hold -e "{wrapper_script.absolute()}"'
+                else:
+                    exec_cmd = f'konsole --hold -e "bash \\"{script_abs_path}\\""'
+                terminal = "true"
+            
+            desktop_entry = f"""[Desktop Entry]
 Name={self.shortcut_name.text() or "Update All"}
 Comment={self.shortcut_comment.text() or "Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak"}
 Exec={exec_cmd}
@@ -1133,7 +1133,7 @@ Terminal={terminal}
 Type=Application
 Categories=System;
 """
-        
+            
             desktop_file = app_dir / "update-all.desktop"
             
             # Write desktop file
