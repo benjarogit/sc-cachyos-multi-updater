@@ -31,6 +31,7 @@ FA_ICONS = {
     'moon': '\uf186',        # fa-moon (dark mode)
     'adjust': '\uf042',      # fa-adjust (auto/theme toggle)
     'language': '\uf1ab',    # fa-language
+    'list-alt': '\uf022',    # fa-list-alt (changelog/release)
 }
 
 def get_fa_icon(icon_name: str, text: str = "", size: int = 12, color: str = None):
@@ -59,6 +60,7 @@ def get_fa_icon(icon_name: str, text: str = "", size: int = 12, color: str = Non
                 'moon': 'fa.moon',
                 'adjust': 'fa.adjust',
                 'language': 'fa.language',
+                'list-alt': 'fa.list-alt',
             }
             if icon_name in icon_map:
                 icon_color = color or '#000000'
