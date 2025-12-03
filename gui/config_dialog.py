@@ -983,6 +983,7 @@ class ConfigDialog(QDialog):
         if PasswordManager and hasattr(self, 'sudo_password'):
             password_text = self.sudo_password.text()
             password_manager = PasswordManager(str(self.script_dir))
+            had_stored_password = self.config.get("SUDO_PASSWORD_STORED") == "true"
             
             if hasattr(self, 'save_sudo_password') and self.save_sudo_password.isChecked():
                 # Checkbox is checked - save password if provided
@@ -1011,16 +1012,24 @@ class ConfigDialog(QDialog):
                         )
                 # If password field is empty but checkbox is checked, keep existing password
             else:
-                # Checkbox is unchecked - only delete if user explicitly wants to remove password
-                # Don't delete if password field is empty (user just didn't enter a new one)
-                # Only delete if user explicitly unchecked the checkbox AND there was a stored password
-                # This is handled by checking if password was previously stored
-                if self.config.get("SUDO_PASSWORD_STORED") == "true":
-                    # User explicitly unchecked save checkbox - remove stored password
+                # Checkbox is unchecked
+                # IMPORTANT: Only delete password if:
+                # 1. User had a stored password before (had_stored_password == True)
+                # 2. AND password field is empty (user didn't enter a new password)
+                # This means: User explicitly unchecked checkbox AND wants to remove stored password
+                # 
+                # If password field has text but checkbox is unchecked:
+                # - Don't save the new password (checkbox unchecked)
+                # - But DON'T delete the old password (user might just be testing/entering)
+                # - Only delete if field is empty (explicit removal intent)
+                if had_stored_password and not password_text:
+                    # User had stored password, checkbox is unchecked, and field is empty
+                    # This indicates explicit intent to remove stored password
                     password_manager.delete_password()
                     self.config.pop("SUDO_PASSWORD_STORED", None)
                     self.config.pop("SUDO_PASSWORD_METHOD", None)
-                # If no password was stored, do nothing (checkbox unchecked is the default state)
+                # Otherwise: checkbox unchecked but password field has text -> don't save new, but keep old
+                # Or: checkbox unchecked, no stored password -> nothing to do
         
         # Advanced
         if self.github_repo.text():
