@@ -62,6 +62,7 @@ def get_fa_icon(icon_name: str, text: str = "", size: int = 12, color: str = Non
                 'adjust': 'fa.adjust',
                 'language': 'fa.language',
                 'list-alt': 'fa.list-alt',
+                'terminal': 'fa.terminal',
             }
             if icon_name in icon_map:
                 icon_color = color or '#000000'
