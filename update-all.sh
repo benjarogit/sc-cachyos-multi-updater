@@ -16,7 +16,7 @@ set -euo pipefail
 
 # ========== Version ==========
 readonly SCRIPT_VERSION="1.0.5"
-readonly GITHUB_REPO="SunnyCueq/cachyos-multi-updater"
+readonly GITHUB_REPO="benjarogit/sc-cachyos-multi-updater"
 
 # ========== Exit-Codes ==========
 # EXIT_SUCCESS=0 wird implizit verwendet (exit 0)
