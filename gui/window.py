@@ -854,19 +854,22 @@ class MainWindow(QMainWindow):
                     if github_parts > local_parts:
                         # Update available - RED
                         self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
-                        self.version_label.setStyleSheet("color: #dc3545; cursor: pointer; font-weight: bold;")
+                        self.version_label.setStyleSheet("color: #dc3545; font-weight: bold;")
+                        self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
                         self.version_label.setToolTip(t("gui_update_available", "Update available! Click to download."))
                         self.version_label.mousePressEvent = lambda e: self.open_github_releases()
                     elif github_parts == local_parts:
                         # Up to date - GREEN
                         self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
-                        self.version_label.setStyleSheet("color: #28a745; cursor: pointer;")
+                        self.version_label.setStyleSheet("color: #28a745;")
+                        self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
                         self.version_label.setToolTip(t("gui_version_up_to_date", "Version is up to date"))
                         self.version_label.mousePressEvent = lambda e: self.check_version_manual()
                     else:
                         # Local is newer (shouldn't happen) - GREEN
                         self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
-                        self.version_label.setStyleSheet("color: #28a745; cursor: pointer;")
+                        self.version_label.setStyleSheet("color: #28a745;")
+                        self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
                         self.version_label.setToolTip(t("gui_version_up_to_date", "Version is up to date"))
                         self.version_label.mousePressEvent = lambda e: self.check_version_manual()
                 except Exception as e:
