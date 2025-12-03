@@ -550,7 +550,7 @@ However, any system update carries some risk. Use `--dry-run` first if you're un
 
 ## 📅 Version History
 
-For the complete version history and changelog, please see the [GitHub Releases](https://github.com/SunnyCueq/cachyos-multi-updater/releases).
+For the complete version history and changelog, please see the [GitHub Releases](https://github.com/benjarogit/sc-cachyos-multi-updater/releases).
 
 ---
 
@@ -571,8 +571,8 @@ For questions or problems:
 
 ## 🔗 Links
 
-- **GitHub Repository:** https://github.com/SunnyCueq/cachyos-multi-updater
-- **Issues:** https://github.com/SunnyCueq/cachyos-multi-updater/issues
+- **GitHub Repository:** https://github.com/benjarogit/sc-cachyos-multi-updater
+- **Issues:** https://github.com/benjarogit/sc-cachyos-multi-updater/issues
 
 ---
 

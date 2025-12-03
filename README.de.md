@@ -554,7 +554,7 @@ Jedoch trägt jedes System-Update ein gewisses Risiko. Verwende zuerst `--dry-ru
 
 ## 📅 Versionshistorie
 
-Für die vollständige Versionshistorie und Changelog siehe [GitHub Releases](https://github.com/SunnyCueq/cachyos-multi-updater/releases).
+Für die vollständige Versionshistorie und Changelog siehe [GitHub Releases](https://github.com/benjarogit/sc-cachyos-multi-updater/releases).
 
 ---
 
