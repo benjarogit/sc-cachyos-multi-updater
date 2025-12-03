@@ -12,8 +12,8 @@ A simple one-click update tool for CachyOS that automatically updates system pac
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/SunnyCueq/cachyos-multi-updater.git
-   cd cachyos-multi-updater
+   git clone https://github.com/benjarogit/sc-cachyos-multi-updater.git
+   cd sc-cachyos-multi-updater
    ```
 
 2. **Run setup (recommended for first-time installation):**
@@ -86,7 +86,7 @@ This script does all of that automatically, saving you time and ensuring everyth
 - ✅ **Flatpak Applications** - Updates all Flatpak apps and runtimes
 - ✅ **AdGuard Home** - Automatic update with configuration backup
 - ✅ **Automatic Cleanup** - Removes old packages, caches, and temporary files
-- ✅ **GUI Version** - Modern Qt-based graphical interface
+- ✅ **GUI Version** - Modern Qt-based graphical interface with real-time progress, secure password management, log viewer, and comprehensive settings dialog
 - ✅ **Interactive Mode** - Choose what to update before running
 - ✅ **Dry-Run Mode** - Preview changes without making them
 - ✅ **Statistics** - Track update history and success rates
@@ -121,7 +121,7 @@ cd cachyos-multi-updater
 ```
 
 **Option B: Download as ZIP**
-1. Go to https://github.com/SunnyCueq/cachyos-multi-updater
+1. Go to https://github.com/benjarogit/sc-cachyos-multi-updater
 2. Click "Code" → "Download ZIP"
 3. Extract and navigate to the folder
 
@@ -215,17 +215,82 @@ cd cachyos-multi-updater
 ./cachyos-update-gui
 ```
 
-**Features:**
-- Visual interface for all settings
-- Real-time update progress
-- Configuration dialog
-- Password management
-- Update history and statistics
-- Theme support (light/dark)
+The GUI provides a modern, user-friendly interface for managing system updates without using the command line.
+
+#### GUI Features
+
+**Main Window:**
+- **Component Selection** - Checkboxes to enable/disable each update type (System, AUR, Cursor, AdGuard, Flatpak)
+- **Real-time Output** - Colored console output showing update progress:
+  - 🟢 Green: Success messages
+  - 🔴 Red: Error messages
+  - 🟠 Orange: Warning messages
+  - ⚫ Black: Normal output
+- **Progress Bar** - Visual progress indicator (0-100%)
+- **Status Display** - Current status message and update information
+- **Version Check** - Automatic check for script updates (shows if newer version available)
+- **Theme Support** - Light and dark themes (follows system theme)
+
+**Buttons:**
+- **Check for Updates** - Runs update script in dry-run mode (preview only, no changes)
+- **Start Updates** - Starts the actual update process
+- **Stop** - Stops a running update (if possible)
+- **Settings** - Opens comprehensive settings dialog
+- **View Logs** - Opens log viewer to browse update logs
+
+**Settings Dialog (6 Tabs):**
+
+1. **Update Components** - Enable/disable each update component
+2. **General Settings** - Log files, retries, notifications, colors, dry-run mode
+3. **Logs** - View and browse log files directly in the GUI
+4. **System** - Script paths, directories, language settings
+5. **Advanced Settings** - GitHub repository, paths, directories, GUI language
+6. **Info** - Version information, links to GitHub, changelog
+
+**Additional Features:**
+- **Secure Password Management** - Encrypted sudo password storage (system keyring or Fernet encryption)
+- **Desktop Shortcut Creation** - Create desktop shortcuts directly from GUI
+- **Update Statistics** - View update history and success rates
+- **Log Viewer** - Browse and view log files with proper formatting
+- **Toast Notifications** - Desktop notifications when updates complete
+- **Syntax Highlighting** - Colored output in console area for better readability
+- **Animations** - Smooth UI animations and transitions
+- **Internationalization** - Multi-language support (German/English, auto-detected)
 
 **Requirements:**
 - PyQt6 must be installed: `pip3 install PyQt6`
 - Or install all dependencies: `pip3 install -r cachyos-multi-updater/requirements-gui.txt`
+
+**GUI Installation:**
+```bash
+# Install PyQt6
+pip3 install PyQt6
+
+# Or install all GUI dependencies
+pip3 install -r cachyos-multi-updater/requirements-gui.txt
+
+# Optional: Install for secure password storage
+pip3 install keyring cryptography
+```
+
+**GUI Usage:**
+1. Start the GUI: `./cachyos-update-gui`
+2. Select which components to update (checkboxes)
+3. Click "Check for Updates" to preview changes (dry-run)
+4. Click "Start Updates" to begin the update process
+5. Monitor progress in real-time
+6. View logs if needed
+7. Configure settings via the Settings button
+
+**GUI Advantages:**
+- ✅ No command-line knowledge required
+- ✅ Visual feedback and progress indication
+- ✅ Easy configuration through settings dialog
+- ✅ Secure password management
+- ✅ Real-time update monitoring
+- ✅ Log viewing without terminal
+- ✅ Desktop notifications
+- ✅ Modern, intuitive interface
 
 ---
 
@@ -340,6 +405,43 @@ ENABLE_AUR_UPDATE=false
 2. Dry-run mode enabled (`DRY_RUN=true` in config)
 3. All updates disabled in config
 4. Check logs: `cat cachyos-multi-updater/logs/$(ls -t cachyos-multi-updater/logs/ | head -1)`
+
+#### GUI won't start
+
+**Check:**
+1. PyQt6 installed? `python3 -c "from PyQt6.QtWidgets import QApplication"`
+2. Python version 3.8+? `python3 --version`
+3. Dependencies installed? `pip3 install -r cachyos-multi-updater/requirements-gui.txt`
+4. Script directory correct? Check that `cachyos-multi-updater/update-all.sh` exists
+
+**Solution:**
+```bash
+# Install PyQt6
+pip3 install PyQt6
+
+# Or install all dependencies
+pip3 install -r cachyos-multi-updater/requirements-gui.txt
+```
+
+#### GUI shows "Script not found"
+
+**Solution:** The GUI needs to find `update-all.sh`. Make sure:
+1. You're running from the project root: `./cachyos-update-gui`
+2. Or set environment variable: `export SCRIPT_DIR=/path/to/cachyos-multi-updater`
+3. Check that `cachyos-multi-updater/update-all.sh` exists
+
+#### GUI password dialog not working
+
+**Check:**
+1. Keyring installed? `pip3 install keyring cryptography`
+2. System keyring available? (usually automatic)
+3. Try entering password manually each time (disable password saving)
+
+**Solution:**
+```bash
+# Install password storage dependencies
+pip3 install keyring cryptography
+```
 
 ### Getting Help
 
@@ -458,14 +560,14 @@ This project is open source. You can freely use, modify, and distribute it under
 
 ## 🤝 Contributing
 
-Improvements and bug reports are welcome! Please create an issue or pull request on [GitHub](https://github.com/SunnyCueq/cachyos-multi-updater).
+Improvements and bug reports are welcome! Please create an issue or pull request on [GitHub](https://github.com/benjarogit/sc-cachyos-multi-updater).
 
 ## 📧 Support
 
 For questions or problems:
 1. Check the log files in `cachyos-multi-updater/logs/`
 2. Check the [Troubleshooting](#-troubleshooting) section above
-3. Create an issue on [GitHub](https://github.com/SunnyCueq/cachyos-multi-updater)
+3. Create an issue on [GitHub](https://github.com/benjarogit/sc-cachyos-multi-updater)
 
 ## 🔗 Links
 
