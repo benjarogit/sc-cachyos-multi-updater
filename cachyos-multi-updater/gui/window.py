@@ -1024,10 +1024,83 @@ class MainWindow(QMainWindow):
         event.accept()
     
     def _on_version_label_clicked_update(self, event):
-        """Handle version label click when update is available - open releases page"""
+        """Handle version label click when update is available - perform automatic update"""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.open_github_releases()
+            # Ask user for confirmation
+            reply = QMessageBox.question(
+                self,
+                t("gui_update_available", "Update Available"),
+                t("gui_update_confirm", "Update to version {version} is available.\n\nDo you want to update now?").format(version=self.latest_github_version),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.perform_automatic_update()
         event.accept()
+    
+    def perform_automatic_update(self):
+        """Perform automatic update via git pull"""
+        import subprocess
+        import sys
+        
+        try:
+            # Get root directory (parent of cachyos-multi-updater/)
+            # script_dir is cachyos-multi-updater/, so parent is root
+            root_dir = self.script_dir.parent
+            
+            # Check if .git exists in root
+            if not (root_dir / ".git").exists():
+                QMessageBox.warning(
+                    self,
+                    t("gui_update_failed", "Update Failed"),
+                    t("gui_no_git_repo", "Git repository not found.\n\nPlease update manually via git pull.")
+                )
+                return
+            
+            # Show progress message
+            QMessageBox.information(
+                self,
+                t("gui_updating", "Updating"),
+                t("gui_update_in_progress", "Updating script...\n\nPlease wait...")
+            )
+            
+            # Change to root directory and run git pull
+            result = subprocess.run(
+                ['git', 'pull'],
+                cwd=str(root_dir),
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                QMessageBox.information(
+                    self,
+                    t("gui_update_success", "Update Successful"),
+                    t("gui_update_success_msg", "Script updated successfully!\n\nPlease restart the application to use the new version.")
+                )
+                # Close application so user can restart
+                self.close()
+            else:
+                error_msg = result.stderr if result.stderr else result.stdout
+                QMessageBox.warning(
+                    self,
+                    t("gui_update_failed", "Update Failed"),
+                    t("gui_update_failed_msg", "Failed to update script:\n\n{error}\n\nPlease update manually via git pull.").format(error=error_msg)
+                )
+        except subprocess.TimeoutExpired:
+            QMessageBox.warning(
+                self,
+                t("gui_update_failed", "Update Failed"),
+                t("gui_update_timeout", "Update timed out. Please try again or update manually.")
+            )
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                t("gui_update_failed", "Update Failed"),
+                t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(e))
+            )
     
     def _on_language_label_clicked(self, event):
         """Handle language label click"""
