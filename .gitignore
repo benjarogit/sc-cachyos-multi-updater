@@ -68,5 +68,12 @@ tests/
 .cursor/
 __pycache__/
 *.pyc
+
+# Report files (internal development)
+CODE_QUALITY_REPORT.md
+FINAL_AUDIT_REPORT.md
+GUI_RELEASE_CHECK.md
+RISK_ASSESSMENT_REPORT.md
+IMPROVEMENTS.md
 *.pyo
 __pycache__

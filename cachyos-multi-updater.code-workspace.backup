@@ -1,12 +1,8 @@
 {
 	"folders": [
 		{
-			"path": "cachyos-multi-updater",
-			"name": "CachyOS Multi-Updater"
-		},
-		{
 			"path": ".",
-			"name": "Root (Start Scripts & Docs)"
+			"name": "CachyOS Multi-Updater"
 		}
 	],
 	"settings": {

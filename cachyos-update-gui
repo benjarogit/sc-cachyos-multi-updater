@@ -1,0 +1,59 @@
+#!/bin/bash
+#
+# CachyOS Multi-Updater - GUI Launcher
+# Simple launcher script for the GUI version
+#
+# Copyright (c) 2024-2025 SunnyCueq
+# Licensed under the MIT License (see LICENSE file)
+#
+
+set -euo pipefail
+
+# Get script directory (where this file is located)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="${SCRIPT_DIR}/cachyos-multi-updater"
+GUI_SCRIPT="${PROJECT_DIR}/gui/main.py"
+
+# Colors
+COLOR_RESET='\033[0m'
+COLOR_YELLOW='\033[1;33m'
+COLOR_RED='\033[0;31m'
+
+# Check if project directory exists
+if [ ! -d "${PROJECT_DIR}" ]; then
+    echo -e "${COLOR_YELLOW}⚠️  Projekt-Verzeichnis nicht gefunden: ${PROJECT_DIR}${COLOR_RESET}"
+    echo -e "${COLOR_YELLOW}   Bitte stelle sicher, dass das Projekt korrekt installiert ist.${COLOR_RESET}"
+    exit 1
+fi
+
+# Check if GUI script exists
+if [ ! -f "${GUI_SCRIPT}" ]; then
+    echo -e "${COLOR_RED}❌ GUI-Script nicht gefunden: ${GUI_SCRIPT}${COLOR_RESET}"
+    exit 1
+fi
+
+# Check if PyQt6 is installed
+if ! python3 -c "from PyQt6.QtWidgets import QApplication" 2>/dev/null; then
+    echo -e "${COLOR_RED}❌ PyQt6 ist nicht installiert!${COLOR_RESET}"
+    echo ""
+    echo "Bitte installieren Sie es mit:"
+    echo "  pip3 install PyQt6"
+    echo ""
+    echo "Oder installieren Sie alle Abhängigkeiten:"
+    echo "  pip3 install -r ${PROJECT_DIR}/requirements-gui.txt"
+    echo ""
+    exit 1
+fi
+
+# Check if update-all.sh exists (required by GUI)
+if [ ! -f "${PROJECT_DIR}/update-all.sh" ]; then
+    echo -e "${COLOR_RED}❌ update-all.sh nicht gefunden in: ${PROJECT_DIR}${COLOR_RESET}"
+    exit 1
+fi
+
+# Start GUI
+echo "🚀 Starting CachyOS Multi-Updater GUI..."
+cd "${PROJECT_DIR}" || exit 1
+export SCRIPT_DIR="${PROJECT_DIR}"
+python3 "${GUI_SCRIPT}"
+

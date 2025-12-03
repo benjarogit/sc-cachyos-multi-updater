@@ -28,18 +28,22 @@ from config_manager import ConfigManager
 
 def get_script_dir():
     """Get script directory"""
-    # Try to get from environment or use current directory
+    # Try to get from environment (set by launcher script)
     script_dir = os.environ.get("SCRIPT_DIR")
     if script_dir and Path(script_dir).exists():
         return script_dir
     
-    # Try to find update-all.sh in parent directory
+    # Try to find update-all.sh in parent directory (gui/ -> cachyos-multi-updater/)
     current_dir = Path(__file__).parent.parent.absolute()
     if (current_dir / "update-all.sh").exists():
         return str(current_dir)
     
-    # Fallback to current directory
-    return str(Path.cwd())
+    # Try current directory (if running from cachyos-multi-updater/)
+    if (Path.cwd() / "update-all.sh").exists():
+        return str(Path.cwd())
+    
+    # Fallback to parent directory
+    return str(current_dir)
 
 
 def main():
