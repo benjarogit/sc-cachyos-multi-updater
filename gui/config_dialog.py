@@ -20,10 +20,26 @@ try:
     from .config_manager import ConfigManager
     from .fa_icons import get_fa_icon, apply_fa_font
     from .i18n import t
+    from .debug_logger import get_logger, log_exception
 except ImportError:
     from config_manager import ConfigManager
     from fa_icons import get_fa_icon, apply_fa_font
     from i18n import t
+    try:
+        from debug_logger import get_logger, log_exception
+    except ImportError:
+        # Fallback if debug_logger not available
+        def get_logger():
+            class DummyLogger:
+                def debug(self, *args, **kwargs): pass
+                def info(self, *args, **kwargs): pass
+                def warning(self, *args, **kwargs): pass
+                def error(self, *args, **kwargs): pass
+                def exception(self, *args, **kwargs): pass
+                def log_function_call(self, *args, **kwargs): pass
+                def log_exception_details(self, *args, **kwargs): pass
+            return DummyLogger()
+        def log_exception(func): return func
 
 
 class ConfigDialog(QDialog):
@@ -31,14 +47,21 @@ class ConfigDialog(QDialog):
     
     def __init__(self, script_dir: str, parent=None):
         super().__init__(parent)
-        self.script_dir = script_dir
-        self.config_manager = ConfigManager(script_dir)
-        self.config = self.config_manager.load_config()
-        self.setWindowTitle("Settings")
-        self.setMinimumWidth(600)
-        self.setMinimumHeight(500)
-        self.init_ui()
-        self.load_config()
+        self.logger = get_logger()
+        self.logger.info(f"Initializing ConfigDialog with script_dir: {script_dir}")
+        try:
+            self.script_dir = script_dir
+            self.config_manager = ConfigManager(script_dir)
+            self.config = self.config_manager.load_config()
+            self.setWindowTitle("Settings")
+            self.setMinimumWidth(600)
+            self.setMinimumHeight(500)
+            self.init_ui()
+            self.load_config()
+            self.logger.info("ConfigDialog initialized successfully")
+        except Exception as e:
+            self.logger.log_exception_details(e, context="ConfigDialog.__init__")
+            raise
     
     def init_ui(self):
         """Initialize UI"""
@@ -1013,11 +1036,14 @@ class ConfigDialog(QDialog):
     
     def create_desktop_shortcut(self):
         """Create desktop shortcut"""
+        self.logger.info("create_desktop_shortcut() called")
         try:
             script_dir = Path(self.script_dir)
             script_path = script_dir / "update-all.sh"
+            self.logger.debug(f"Script path: {script_path}")
             
             if not script_path.exists():
+                self.logger.error(f"Script not found: {script_path}")
                 QMessageBox.critical(
                     self,
                     t("gui_error", "Error"),
@@ -1027,13 +1053,20 @@ class ConfigDialog(QDialog):
             
             # Get icon
             try:
-                icon_data = self.desktop_icon.itemData(self.desktop_icon.currentIndex())
-            except Exception:
+                current_index = self.desktop_icon.currentIndex()
+                self.logger.debug(f"Getting icon data for index: {current_index}")
+                icon_data = self.desktop_icon.itemData(current_index)
+                self.logger.debug(f"Icon data: {icon_data}")
+            except Exception as e:
+                self.logger.log_exception_details(e, context="Getting icon data")
                 icon_data = "system-software-update"  # Fallback
+                self.logger.warning(f"Using fallback icon: {icon_data}")
             
             if icon_data == "custom":
                 icon_value = self.custom_icon_path.text()
+                self.logger.debug(f"Custom icon path: {icon_value}")
                 if not icon_value or not os.path.exists(icon_value):
+                    self.logger.error(f"Custom icon file not found: {icon_value}")
                     QMessageBox.warning(
                         self,
                         t("gui_error", "Error"),
@@ -1042,9 +1075,10 @@ class ConfigDialog(QDialog):
                     return
             else:
                 icon_value = icon_data if icon_data else "system-software-update"
-        
-        # Determine target directories
-        app_dir = Path.home() / ".local" / "share" / "applications"
+                self.logger.debug(f"Using system icon: {icon_value}")
+            
+            # Determine target directories
+            app_dir = Path.home() / ".local" / "share" / "applications"
         desktop_dir = None
         
         # Try to find desktop directory
@@ -1100,9 +1134,8 @@ Type=Application
 Categories=System;
 """
         
-        desktop_file = app_dir / "update-all.desktop"
-        
-        try:
+            desktop_file = app_dir / "update-all.desktop"
+            
             # Write desktop file
             with open(desktop_file, 'w', encoding='utf-8') as f:
                 f.write(desktop_entry)
