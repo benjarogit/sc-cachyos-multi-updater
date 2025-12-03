@@ -184,19 +184,33 @@ class ConfigDialog(QDialog):
         desktop_info.setWordWrap(True)
         desktop_layout.addWidget(desktop_info)
         
+        # Shortcut name and comment
+        shortcut_name_layout = QFormLayout()
+        self.shortcut_name = QLineEdit()
+        self.shortcut_name.setPlaceholderText("Update All")
+        self.shortcut_name.setText("Update All")
+        shortcut_name_layout.addRow(t("gui_shortcut_name", "Name:"), self.shortcut_name)
+        
+        self.shortcut_comment = QLineEdit()
+        self.shortcut_comment.setPlaceholderText("Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak")
+        self.shortcut_comment.setText("Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak")
+        shortcut_name_layout.addRow(t("gui_shortcut_comment", "Comment:"), self.shortcut_comment)
+        
+        desktop_layout.addLayout(shortcut_name_layout)
+        
         # Icon selection
         icon_layout = QHBoxLayout()
         icon_layout.addWidget(QLabel(t("gui_icon", "Icon:")))
         
         self.desktop_icon = QComboBox()
-        # Common system icons (removed duplicates)
+        # Common system icons (ensured unique icons)
         system_icons = [
             ("system-software-update", t("gui_icon_system_update", "System Update")),
-            ("update-manager", t("gui_icon_update_manager", "Update Manager")),
-            ("package-updater", t("gui_icon_package_updater", "Package Updater")),
+            ("package-updater", t("gui_icon_update_manager", "Update Manager")),
             ("applications-system", t("gui_icon_applications_system", "Applications System")),
-            ("distributor-logo", t("gui_icon_distributor", "Distributor Logo")),
-            ("preferences-system", t("gui_icon_preferences_system", "Preferences System")),
+            ("preferences-system", t("gui_icon_distributor", "Distributor Logo")),
+            ("system-file-manager", t("gui_icon_preferences_system", "Preferences System")),
+            ("utilities-terminal", t("gui_icon_terminal", "Terminal")),
         ]
         for icon_name, icon_label in system_icons:
             self.desktop_icon.addItem(icon_label, icon_name)

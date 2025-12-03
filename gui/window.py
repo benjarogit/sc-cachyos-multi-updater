@@ -862,10 +862,10 @@ class MainWindow(QMainWindow):
                     
                     if github_parts > local_parts:
                         # Update available - RED
-                        self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
+                        self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub) ⬇")
                         self.version_label.setStyleSheet("color: #dc3545; font-weight: bold;")
                         self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
-                        self.version_label.setToolTip(t("gui_update_available", "Update available! Click to download."))
+                        self.version_label.setToolTip(t("gui_version_click_to_update", "Click to update"))
                         self.version_label.mousePressEvent = lambda e: self.open_github_releases()
                     elif github_parts == local_parts:
                         # Up to date - GREEN

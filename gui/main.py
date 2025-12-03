@@ -44,10 +44,14 @@ def get_script_dir():
 
 def main():
     """Main entry point"""
-    # Suppress Qt QDBus warnings
+    # Suppress Qt QDBus warnings and other Qt messages
     def qt_message_handler(msg_type, context, message):
-        # Filter out QDBus warnings
-        if "QDBusError" in message or "qt.qpa.services" in message:
+        # Filter out QDBus warnings and portal errors
+        if ("QDBusError" in message or 
+            "qt.qpa.services" in message or 
+            "Failed to register with host portal" in message or
+            "org.freedesktop.portal" in message or
+            "org.kde.kioclient" in message):
             return
         # Print other messages normally (optional, can be removed)
         # print(message)
