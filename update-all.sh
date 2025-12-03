@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # ========== Version ==========
-readonly SCRIPT_VERSION="1.0.3"
+readonly SCRIPT_VERSION="1.0.4"
 readonly GITHUB_REPO="SunnyCueq/cachyos-multi-updater"
 
 # ========== Exit-Codes ==========
@@ -730,7 +730,7 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
             show_progress $CURRENT_STEP $TOTAL_STEPS "Cursor Editor Update" "⏭️"
                 ;;
             "aur")
-                # Über AUR installiert → prüfe ob installierte Version aktuell ist
+                # Über AUR installiert → prüfe ob Updates im AUR verfügbar sind
                 CURSOR_AUR_VERSION_FULL=$(pacman -Q cursor-bin | awk '{print $2}')
                 # Extrahiere Version ohne Build-Nummer (2.1.39-1 -> 2.1.39)
                 CURSOR_AUR_VERSION=$(echo "$CURSOR_AUR_VERSION_FULL" | sed 's/-.*$//')
@@ -764,11 +764,35 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
                 log_info "$(t 'log_installed_cursor_version') $INSTALLED_VERSION"
                 log_info "$(t 'log_aur_cursor_version') $CURSOR_AUR_VERSION"
                 
-                # Vergleiche installierte Version mit AUR-Version
-                VERSION_COMPARE=$(compare_versions "$INSTALLED_VERSION" "$CURSOR_AUR_VERSION")
+                # WICHTIG: Prüfe ob Updates im AUR verfügbar sind (nicht nur installierte Version vergleichen!)
+                AUR_UPDATE_AVAILABLE=false
+                if command -v yay >/dev/null 2>&1; then
+                    AUR_UPDATE_CHECK=$(yay -Qua cursor-bin 2>/dev/null | grep -q cursor-bin && echo "yes" || echo "no")
+                    if [ "$AUR_UPDATE_CHECK" = "yes" ]; then
+                        AUR_UPDATE_AVAILABLE=true
+                        # Extrahiere neue Version aus yay -Qua Ausgabe
+                        AUR_UPDATE_LINE=$(yay -Qua cursor-bin 2>/dev/null | grep cursor-bin)
+                        if [ -n "$AUR_UPDATE_LINE" ]; then
+                            # Format: "aur/cursor-bin 2.1.46-1 -> 2.1.47-1"
+                            CURSOR_AUR_NEW_VERSION=$(echo "$AUR_UPDATE_LINE" | awk '{print $3}' | sed 's/-.*$//')
+                            log_info "$(t 'log_cursor_update_needed') $INSTALLED_VERSION -> $CURSOR_AUR_NEW_VERSION (AUR)"
+                        fi
+                    fi
+                elif command -v paru >/dev/null 2>&1; then
+                    AUR_UPDATE_CHECK=$(paru -Qua cursor-bin 2>/dev/null | grep -q cursor-bin && echo "yes" || echo "no")
+                    if [ "$AUR_UPDATE_CHECK" = "yes" ]; then
+                        AUR_UPDATE_AVAILABLE=true
+                        # Extrahiere neue Version aus paru -Qua Ausgabe
+                        AUR_UPDATE_LINE=$(paru -Qua cursor-bin 2>/dev/null | grep cursor-bin)
+                        if [ -n "$AUR_UPDATE_LINE" ]; then
+                            # Format: "aur/cursor-bin 2.1.46-1 -> 2.1.47-1"
+                            CURSOR_AUR_NEW_VERSION=$(echo "$AUR_UPDATE_LINE" | awk '{print $3}' | sed 's/-.*$//')
+                            log_info "$(t 'log_cursor_update_needed') $INSTALLED_VERSION -> $CURSOR_AUR_NEW_VERSION (AUR)"
+                        fi
+                    fi
+                fi
                 
-                if [ "$VERSION_COMPARE" = "older" ]; then
-                    log_info "$(t 'log_cursor_update_needed') $INSTALLED_VERSION -> $CURSOR_AUR_VERSION"
+                if [ "$AUR_UPDATE_AVAILABLE" = "true" ]; then
                     # Update über AUR
                     if command -v yay >/dev/null 2>&1; then
                         log_info "$(t 'log_using_yay')"

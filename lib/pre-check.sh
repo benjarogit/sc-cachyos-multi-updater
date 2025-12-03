@@ -113,40 +113,46 @@ check_available_updates() {
                     CURRENT_VERSION=$(grep -oP '"version":\s*"\K[0-9.]+' "$HOME/.local/share/cursor/resources/app/package.json" 2>/dev/null | head -1 || echo "unbekannt")
                 fi
 
-                # Prüfe AUR-Version
+                # Prüfe ob Updates im AUR verfügbar sind (nicht nur installierte Version vergleichen!)
                 if pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
                     CURSOR_AUR_VERSION_FULL=$(pacman -Q cursor-bin | awk '{print $2}')
                     CURSOR_AUR_VERSION=$(echo "$CURSOR_AUR_VERSION_FULL" | sed 's/-.*$//')
                     
-                    if [ "$CURRENT_VERSION" != "unbekannt" ]; then
-                        # Vergleiche installierte Version mit AUR-Version (semantischer Vergleich)
-                        # Verwende compare_versions Funktion wenn verfügbar, sonst sort -V
-                        local VERSION_COMPARE=""
-                        if command -v compare_versions >/dev/null 2>&1; then
-                            VERSION_COMPARE=$(compare_versions "$CURRENT_VERSION" "$CURSOR_AUR_VERSION")
-                        else
-                            # Fallback: Verwende sort -V für semantischen Versionsvergleich
-                            if [ "$CURRENT_VERSION" = "$CURSOR_AUR_VERSION" ]; then
-                                VERSION_COMPARE="equal"
-                            elif printf '%s\n%s\n' "$CURRENT_VERSION" "$CURSOR_AUR_VERSION" | sort -V | head -1 | grep -q "^$CURRENT_VERSION$"; then
-                                VERSION_COMPARE="older"
-                            else
-                                VERSION_COMPARE="newer"
-                            fi
+                    # WICHTIG: Prüfe ob Updates im AUR verfügbar sind
+                    AUR_UPDATE_AVAILABLE=false
+                    CURSOR_AUR_NEW_VERSION=""
+                    if command -v yay >/dev/null 2>&1; then
+                        AUR_UPDATE_LINE=$(yay -Qua cursor-bin 2>/dev/null | grep cursor-bin || echo "")
+                        if [ -n "$AUR_UPDATE_LINE" ]; then
+                            AUR_UPDATE_AVAILABLE=true
+                            # Format: "aur/cursor-bin 2.1.46-1 -> 2.1.47-1"
+                            CURSOR_AUR_NEW_VERSION=$(echo "$AUR_UPDATE_LINE" | awk '{print $3}' | sed 's/-.*$//')
                         fi
-                        
-                        if [ "$VERSION_COMPARE" = "equal" ]; then
-                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert)"
-                        elif [ "$VERSION_COMPARE" = "older" ]; then
-                            echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $CURSOR_AUR_VERSION (AUR-Update verfügbar)"
-                            updates_found=true
-                            total_packages=$((total_packages + 1))
-                        else
-                            # CURRENT_VERSION ist neuer (sollte nicht passieren, aber sicherheitshalber)
-                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert, AUR: v$CURSOR_AUR_VERSION)"
+                    elif command -v paru >/dev/null 2>&1; then
+                        AUR_UPDATE_LINE=$(paru -Qua cursor-bin 2>/dev/null | grep cursor-bin || echo "")
+                        if [ -n "$AUR_UPDATE_LINE" ]; then
+                            AUR_UPDATE_AVAILABLE=true
+                            # Format: "aur/cursor-bin 2.1.46-1 -> 2.1.47-1"
+                            CURSOR_AUR_NEW_VERSION=$(echo "$AUR_UPDATE_LINE" | awk '{print $3}' | sed 's/-.*$//')
                         fi
+                    fi
+                    
+                    if [ "$AUR_UPDATE_AVAILABLE" = "true" ] && [ -n "$CURSOR_AUR_NEW_VERSION" ]; then
+                        # Update verfügbar im AUR
+                        if [ "$CURRENT_VERSION" != "unbekannt" ]; then
+                            echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available_from_to') $CURRENT_VERSION → $CURSOR_AUR_NEW_VERSION (AUR-Update verfügbar)"
+                        else
+                            echo -e "   ${COLOR_SUCCESS}✓${COLOR_RESET} $(t 'update_available') → $CURSOR_AUR_NEW_VERSION (AUR-Update verfügbar)"
+                        fi
+                        updates_found=true
+                        total_packages=$((total_packages + 1))
                     else
-                        echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked') (AUR: v$CURSOR_AUR_VERSION)"
+                        # Keine Updates im AUR verfügbar
+                        if [ "$CURRENT_VERSION" != "unbekannt" ]; then
+                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (v$CURRENT_VERSION, über AUR installiert)"
+                        else
+                            echo -e "   ${COLOR_WARNING}○${COLOR_RESET} $(t 'already_current') (AUR: v$CURSOR_AUR_VERSION)"
+                        fi
                     fi
                 else
                     echo -e "   ${COLOR_WARNING}?${COLOR_RESET} $(t 'version_will_be_checked')"
