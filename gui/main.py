@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from PyQt6.QtCore import Qt, QtMsgType, qInstallMessageHandler
 
 # Initialize i18n before importing window
-from i18n import init_i18n
+from i18n import init_i18n, t
 from window import MainWindow
 from theme_manager import ThemeManager
 from config_manager import ConfigManager
@@ -70,19 +70,18 @@ def main():
     # Get script directory
     script_dir = get_script_dir()
     
+    # Initialize i18n early (needed for error messages)
+    init_i18n(script_dir)
+    
     # Check if update-all.sh exists
     script_path = Path(script_dir) / "update-all.sh"
     if not script_path.exists():
         QMessageBox.critical(
             None,
-            "Error",
-            f"update-all.sh not found in:\n{script_dir}\n\n"
-            "Please run this GUI from the script directory or set SCRIPT_DIR environment variable."
+            t("gui_error", "Error"),
+            t("gui_script_not_found_main", "update-all.sh not found in:\n{script_dir}\n\nPlease run this GUI from the script directory or set SCRIPT_DIR environment variable.").format(script_dir=script_dir)
         )
         sys.exit(1)
-    
-    # Initialize i18n
-    init_i18n(script_dir)
     
     # Apply theme
     config_manager = ConfigManager(script_dir)

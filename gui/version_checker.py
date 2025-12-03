@@ -32,7 +32,14 @@ class VersionChecker:
                         match = re.search(r'["\']([0-9.]+)["\']', line)
                         if match:
                             return match.group(1)
-        except Exception:
+        except (OSError, IOError) as e:
+            # Failed to read script file - return unknown
+            pass
+        except (ValueError, IndexError, AttributeError) as e:
+            # Failed to parse version - return unknown
+            pass
+        except Exception as e:
+            # Unexpected error - return unknown
             pass
         return "unknown"
     
@@ -48,7 +55,14 @@ class VersionChecker:
                         if line.startswith('GITHUB_REPO='):
                             github_repo = line.split('=', 1)[1].strip().strip('"\'')
                             break
-            except Exception:
+            except (OSError, IOError) as e:
+                # Failed to read config file - use default
+                pass
+            except (ValueError, AttributeError) as e:
+                # Failed to parse config - use default
+                pass
+            except Exception as e:
+                # Unexpected error - use default
                 pass
         
         return github_repo

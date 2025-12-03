@@ -68,7 +68,11 @@ def get_fa_icon(icon_name: str, text: str = "", size: int = 12, color: str = Non
                 icon_color = color or '#000000'
                 icon = qta.icon(icon_map[icon_name], color=icon_color)
                 return icon, text
-        except Exception:
+        except (ImportError, AttributeError, KeyError) as e:
+            # qtawesome not available or icon not found - fallback to Unicode
+            pass
+        except Exception as e:
+            # Unexpected error - fallback to Unicode
             pass
     
     # Fallback to Unicode

@@ -10,6 +10,17 @@ import subprocess
 from pathlib import Path
 from PyQt6.QtCore import QProcess, QObject, pyqtSignal
 
+# Handle imports for both direct execution and module import
+try:
+    from .i18n import t
+except ImportError:
+    try:
+        from i18n import t
+    except ImportError:
+        # Fallback if i18n not available
+        def t(key: str, default: str = "") -> str:
+            return default
+
 
 class UpdateRunner(QObject):
     """Runs update-all.sh script and emits signals for output"""
@@ -26,11 +37,12 @@ class UpdateRunner(QObject):
         self.script_path = self.script_dir / "update-all.sh"
         self.config = config
         self.process = None
+        self.temp_script_path = None
         
     def start_update(self, dry_run: bool = False, interactive: bool = False, sudo_password: str = None):
         """Start the update process"""
         if not self.script_path.exists():
-            self.error_occurred.emit(f"Script not found: {self.script_path}")
+            self.error_occurred.emit(t("gui_script_not_found_runner", "Script not found: {path}").format(path=self.script_path))
             return
         
         # Build command
@@ -53,21 +65,44 @@ class UpdateRunner(QObject):
         self.sudo_password = sudo_password
         
         # If sudo password provided, create wrapper script
+        temp_script_path = None
         if sudo_password and not dry_run:
             import tempfile
             import stat
-            temp_script = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.sh')
-            # Escape password for bash
-            escaped_password = sudo_password.replace('"', '\\"').replace('$', '\\$').replace('`', '\\`')
-            temp_script.write(f'''#!/bin/bash
+            try:
+                temp_script = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.sh')
+                # Escape password for bash (complete escaping for all special characters)
+                # Order matters: backslash must be escaped first!
+                escaped_password = (sudo_password
+                    .replace('\\', '\\\\')  # Backslash first!
+                    .replace('"', '\\"')
+                    .replace('$', '\\$')
+                    .replace('`', '\\`')
+                    .replace('\n', '\\n')
+                    .replace('\r', '\\r')
+                    .replace("'", "\\'"))
+                temp_script.write(f'''#!/bin/bash
+set -euo pipefail
 # Validate sudo with password
 echo "{escaped_password}" | sudo -S -v || exit 1
 # Run the actual script
 exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
 ''')
-            temp_script.close()
-            os.chmod(temp_script.name, stat.S_IRWXU)
-            cmd = ["bash", temp_script.name]
+                temp_script.close()
+                temp_script_path = temp_script.name
+                os.chmod(temp_script_path, stat.S_IRWXU)
+                # Store temp script path IMMEDIATELY for cleanup
+                self.temp_script_path = temp_script_path
+                cmd = ["bash", temp_script_path]
+            except Exception as e:
+                # Cleanup temp script if creation failed
+                if temp_script_path and os.path.exists(temp_script_path):
+                    try:
+                        os.unlink(temp_script_path)
+                    except Exception:
+                        pass
+                self.error_occurred.emit(t("gui_sudo_wrapper_failed", "Failed to create sudo wrapper script: {error}").format(error=str(e)))
+                return
         
         # Create process
         self.process = QProcess()
@@ -77,16 +112,94 @@ exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
         
         # Start process
         self.process.setWorkingDirectory(str(self.script_dir))
-        self.process.start(cmd[0], cmd[1:] if len(cmd) > 1 else [])
         
-        if not self.process.waitForStarted():
-            self.error_occurred.emit("Failed to start update script")
+        # Set environment variables
+        process_env = self.process.processEnvironment()
+        for key, value in env.items():
+            process_env.insert(key, value)
+        self.process.setProcessEnvironment(process_env)
+        
+        # Start process and check for errors
+        started = self.process.start(cmd[0], cmd[1:] if len(cmd) > 1 else [])
+        
+        if not started:
+            # Process failed to start immediately
+            error_msg = self.process.errorString()
+            if not error_msg:
+                error_msg = t("gui_process_start_failed", "Failed to start process: {cmd}").format(cmd=cmd[0])
+            else:
+                error_msg = t("gui_process_start_failed_detail", "Failed to start update script: {error}").format(error=error_msg)
+            # Cleanup temp script if created (use self.temp_script_path which is set immediately)
+            if self.temp_script_path and os.path.exists(self.temp_script_path):
+                try:
+                    os.unlink(self.temp_script_path)
+                except OSError:
+                    # Log but don't fail - cleanup is best effort
+                    pass  # File might already be deleted
+                except Exception:
+                    # Unexpected error during cleanup - log but continue
+                    pass  # Cleanup failure shouldn't break the flow
+                self.temp_script_path = None
+            self.error_occurred.emit(error_msg)
+            self.process.deleteLater()
+            self.process = None
+            return
+        
+        # Wait for process to start (with timeout)
+        if not self.process.waitForStarted(5000):  # 5 second timeout
+            # Check what went wrong
+            error = self.process.error()
+            error_msg = self.process.errorString()
+            
+            if error == QProcess.ProcessError.FailedToStart:
+                if not error_msg:
+                    error_msg = t("gui_process_failed_to_start", "Process '{cmd}' failed to start. Is bash installed and in PATH?").format(cmd=cmd[0])
+                else:
+                    error_msg = t("gui_process_failed_to_start_detail", "Failed to start: {error}").format(error=error_msg)
+            elif error == QProcess.ProcessError.Crashed:
+                error_msg = t("gui_process_crashed", "Process crashed immediately after start: {error}").format(error=error_msg)
+            elif error == QProcess.ProcessError.Timedout:
+                error_msg = t("gui_process_timeout", "Process start timed out")
+            elif error == QProcess.ProcessError.WriteError:
+                error_msg = t("gui_process_write_error", "Write error: {error}").format(error=error_msg)
+            elif error == QProcess.ProcessError.ReadError:
+                error_msg = t("gui_process_read_error", "Read error: {error}").format(error=error_msg)
+            else:
+                if error_msg:
+                    error_msg = t("gui_process_unknown_error", "Unknown error: {error}").format(error=error_msg)
+                else:
+                    error_msg = t("gui_process_unknown_error_generic", "Unknown error starting process")
+            
+            # Cleanup temp script if created (use self.temp_script_path which is set immediately)
+            if self.temp_script_path and os.path.exists(self.temp_script_path):
+                try:
+                    os.unlink(self.temp_script_path)
+                except OSError:
+                    # Log but don't fail - cleanup is best effort
+                    pass  # File might already be deleted
+                except Exception:
+                    # Unexpected error during cleanup - log but continue
+                    pass  # Cleanup failure shouldn't break the flow
+                self.temp_script_path = None
+            
+            self.error_occurred.emit(error_msg)
+            self.process.deleteLater()
+            self.process = None
+            return
     
     def stop_update(self):
         """Stop the update process"""
         if self.process and self.process.state() == QProcess.ProcessState.Running:
             self.process.kill()
-            self.process.waitForFinished()
+            self.process.waitForFinished(5000)  # 5 second timeout
+        
+        # Cleanup temp script if it was created
+        if self.temp_script_path and os.path.exists(self.temp_script_path):
+            try:
+                os.unlink(self.temp_script_path)
+            except Exception:
+                pass
+            self.temp_script_path = None
     
     def _on_stdout(self):
         """Handle stdout output"""
@@ -117,6 +230,19 @@ exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
     def _on_finished(self, exit_code: int, exit_status: int):
         """Handle process finished"""
         self.finished.emit(exit_code)
+        
+        # Cleanup temp script if it was created
+        if self.temp_script_path and os.path.exists(self.temp_script_path):
+            try:
+                os.unlink(self.temp_script_path)
+            except Exception:
+                pass
+            self.temp_script_path = None
+        
+        # Cleanup process
+        if self.process:
+            self.process.deleteLater()
+            self.process = None
     
     def _parse_progress(self, line: str):
         """Try to parse progress information from output"""
@@ -129,7 +255,11 @@ exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
                 current_step = progress_match.group(2)
                 total_steps = progress_match.group(3)
                 self.progress_update.emit(percent, line)
-            except:
+            except (ValueError, IndexError, AttributeError):
+                # Invalid progress format - ignore silently
+                pass
+            except Exception:
+                # Unexpected error parsing progress - ignore silently
                 pass
         elif "%" in line:
             # Try to extract percentage without step info
@@ -138,6 +268,10 @@ exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
                 if percent_match:
                     percent = int(percent_match.group(1))
                     self.progress_update.emit(percent, line)
-            except:
+            except (ValueError, AttributeError):
+                # Invalid progress format - ignore silently
+                pass
+            except Exception:
+                # Unexpected error parsing progress - ignore silently
                 pass
 

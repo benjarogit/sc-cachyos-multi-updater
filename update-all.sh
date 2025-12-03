@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # ========== Version ==========
-readonly SCRIPT_VERSION="1.0.6"
+readonly SCRIPT_VERSION="1.0.7"
 readonly GITHUB_REPO="benjarogit/sc-cachyos-multi-updater"
 
 # ========== Exit-Codes ==========
@@ -34,6 +34,7 @@ LOG_FILE="$LOG_DIR/update-$(date +%Y%m%d-%H%M%S).log"
 readonly LOG_FILE
 MAX_LOG_FILES=3
 readonly CONFIG_FILE="$SCRIPT_DIR/config.conf"
+readonly LOCK_FILE="${SCRIPT_DIR}/.update-all.lock"
 
 # Default-Werte
 UPDATE_SYSTEM=true
@@ -196,6 +197,75 @@ source "$SCRIPT_DIR/lib/summary.sh"
 # ========== Kommandozeilen-Argumente ==========
 INTERACTIVE_MODE=false
 
+# ========== Help-Funktion ==========
+show_help() {
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "$(t 'app_name')"
+    echo "$(t 'version_label') $SCRIPT_VERSION"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "$(t 'help_description')"
+    echo ""
+    echo "$(t 'usage') $0 [$(t 'options_lowercase')]"
+    echo ""
+    echo "$(t 'options')"
+    echo ""
+    echo "  $(t 'update_options')"
+    echo ""
+    echo "    --only-system        $(t 'only_system')"
+    echo "                         $(t 'only_system_desc')"
+    echo ""
+    echo "    --only-aur           $(t 'only_aur')"
+    echo "                         $(t 'only_aur_desc')"
+    echo ""
+    echo "    --only-cursor        $(t 'only_cursor')"
+    echo "                         $(t 'only_cursor_desc')"
+    echo ""
+    echo "    --only-adguard       $(t 'only_adguard')"
+    echo "                         $(t 'only_adguard_desc')"
+    echo ""
+    echo "    --only-flatpak       $(t 'only_flatpak')"
+    echo "                         $(t 'only_flatpak_desc')"
+    echo ""
+    echo "  $(t 'mode_options')"
+    echo ""
+    echo "    --dry-run            $(t 'dry_run_desc')"
+    echo "                         $(t 'dry_run_desc_detail')"
+    echo ""
+    echo "    --interactive, -i    $(t 'interactive_desc')"
+    echo "                         $(t 'interactive_desc_detail')"
+    echo ""
+    echo "  $(t 'info_options')"
+    echo ""
+    echo "    --stats              $(t 'stats_desc')"
+    echo "                         $(t 'stats_desc_detail')"
+    echo ""
+    echo "    --version, -v        $(t 'version_desc')"
+    echo ""
+    echo "    --help, -h           $(t 'help_desc')"
+    echo ""
+    echo "$(t 'examples')"
+    echo ""
+    echo "  $0 --dry-run"
+    echo "     $(t 'example_dry_run')"
+    echo ""
+    echo "  $0 --only-system"
+    echo "     $(t 'example_only_system')"
+    echo ""
+    echo "  $0 --interactive"
+    echo "     $(t 'example_interactive')"
+    echo ""
+    echo "  $0 --only-system --dry-run"
+    echo "     $(t 'example_combine')"
+    echo ""
+    echo "$(t 'more_info')"
+    echo ""
+    echo "  $(t 'repository') https://github.com/$GITHUB_REPO"
+    echo "  $(t 'config_file') $CONFIG_FILE"
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+}
+
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -247,23 +317,7 @@ parse_args() {
                 exit 0
                 ;;
             --help|-h)
-                t 'app_name'
-                echo "$(t 'version_label') $SCRIPT_VERSION"
-                echo ""
-                echo "$(t 'usage') $0 [OPTIONEN]"
-                echo ""
-                t 'options'
-                echo "  --only-system        $(t 'only_system')"
-                echo "  --only-aur           $(t 'only_aur')"
-                echo "  --only-cursor        $(t 'only_cursor')"
-                echo "  --only-adguard       $(t 'only_adguard')"
-                echo "  --only-flatpak       $(t 'only_flatpak')"
-                echo "  --dry-run            $(t 'dry_run_desc')"
-                echo "  --interactive, -i    $(t 'interactive_desc')"
-                echo "  --stats              $(t 'stats_desc')"
-                echo "  --version, -v        $(t 'version_desc')"
-                echo "  --help, -h           $(t 'help_desc')"
-                echo ""
+                show_help
                 exit 0
                 ;;
             --version|-v)
@@ -403,9 +457,26 @@ EOF
 
 # Logging-Funktionen sind bereits oben definiert (vor Module laden)
 
+# ========== Cleanup-Funktionen ==========
+cleanup_lock_file() {
+    # Remove lock file if it exists
+    if [[ -f "${LOCK_FILE}" ]]; then
+        rm -f "${LOCK_FILE}" 2>/dev/null || true
+        log_info "$(t 'log_lock_file_removed')"
+    fi
+    # Remove lock directory if it exists (cleanup after crash during atomic creation)
+    LOCK_DIR="${LOCK_FILE}.d"
+    if [[ -d "${LOCK_DIR}" ]]; then
+        rmdir "${LOCK_DIR}" 2>/dev/null || true
+    fi
+}
+
 # ========== Error Handling ==========
 cleanup_on_error() {
     local exit_code=$?
+    # Always remove lock file on exit
+    cleanup_lock_file
+    
     if [ $exit_code -ne 0 ]; then
         log_error "$(t 'log_script_error_exit') $exit_code)"
         notify-send "Update fehlgeschlagen!" "Bitte Logs prüfen: $LOG_FILE" 2>/dev/null || true
@@ -418,7 +489,16 @@ cleanup_on_error() {
     return $exit_code
 }
 
+cleanup_on_signal() {
+    # Handle interrupt signals (Ctrl+C, kill, etc.)
+    log_warning "$(t 'log_script_interrupted')"
+    cleanup_lock_file
+    exit 130  # Standard exit code for SIGINT (Ctrl+C)
+}
+
+# Set traps for cleanup
 trap cleanup_on_error EXIT
+trap cleanup_on_signal INT TERM
 
 # ========== Retry-Funktion für Downloads ==========
 download_with_retry() {
@@ -522,6 +602,56 @@ log_info "$(t 'log_update_started')"
 log_info "$(t 'log_file') $LOG_FILE"
 [ "$DRY_RUN" = "true" ] && log_info "$(t 'log_dry_run_enabled')"
 [ "$ENABLE_COLORS" = "true" ] && log_info "$(t 'log_colors_enabled')"
+
+# ========== Lock-File-Prüfung ==========
+# Prüfe ob bereits ein Update läuft
+# Atomic Lock-File-Erstellung (verhindert Race Conditions)
+LOCK_DIR="${LOCK_FILE}.d"
+if mkdir "${LOCK_DIR}" 2>/dev/null; then
+    # Erfolgreich: Wir haben das Lock-Verzeichnis erstellt (atomar)
+    echo $$ > "${LOCK_FILE}"
+    rmdir "${LOCK_DIR}" 2>/dev/null || true
+    log_info "$(t 'log_lock_file_created') ${LOCK_FILE}"
+else
+    # Lock-Verzeichnis existiert bereits - prüfe ob Prozess noch läuft
+    if [[ -f "${LOCK_FILE}" ]]; then
+        LOCK_PID=$(cat "${LOCK_FILE}" 2>/dev/null || echo "")
+        if [[ -n "${LOCK_PID}" ]] && kill -0 "${LOCK_PID}" 2>/dev/null; then
+            log_error "$(t 'log_update_already_running')"
+            echo -e "${COLOR_ERROR}❌ $(t 'update_already_running')${COLOR_RESET}"
+            echo "   $(t 'lock_file_exists') ${LOCK_FILE}"
+            echo "   $(t 'lock_file_pid') ${LOCK_PID}"
+            exit 1
+        else
+            # Lock-File existiert, aber Prozess läuft nicht mehr - entfernen
+            log_warning "$(t 'log_stale_lock_file')"
+            rm -f "${LOCK_FILE}" 2>/dev/null || true
+            # Versuche erneut Lock zu erstellen
+            if mkdir "${LOCK_DIR}" 2>/dev/null; then
+                echo $$ > "${LOCK_FILE}"
+                rmdir "${LOCK_DIR}" 2>/dev/null || true
+                log_info "$(t 'log_lock_file_created') ${LOCK_FILE}"
+            else
+                # Immer noch Race Condition - anderer Prozess war schneller
+                log_error "$(t 'log_update_already_running')"
+                echo -e "${COLOR_ERROR}❌ $(t 'update_already_running')${COLOR_RESET}"
+                exit 1
+            fi
+        fi
+    else
+        # Lock-Verzeichnis existiert, aber keine Lock-Datei - entferne Verzeichnis und versuche erneut
+        rmdir "${LOCK_DIR}" 2>/dev/null || true
+        if mkdir "${LOCK_DIR}" 2>/dev/null; then
+            echo $$ > "${LOCK_FILE}"
+            rmdir "${LOCK_DIR}" 2>/dev/null || true
+            log_info "$(t 'log_lock_file_created') ${LOCK_FILE}"
+        else
+            log_error "$(t 'log_update_already_running')"
+            echo -e "${COLOR_ERROR}❌ $(t 'update_already_running')${COLOR_RESET}"
+            exit 1
+        fi
+    fi
+fi
 
 # Prüfe Update-Häufigkeit
 check_update_frequency
@@ -1769,6 +1899,10 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo -e "${COLOR_SUCCESS}✅ $(t 'all_updates_completed')${COLOR_RESET}"
 echo ""
+
+# Lock-File entfernen (bei erfolgreichem Abschluss)
+cleanup_lock_file
+
 echo -e "${COLOR_INFO}➜ $(t 'press_enter_to_close')${COLOR_RESET}"
 echo ""
 # Immer warten - auch wenn nicht interaktiv (für Desktop-Icons)

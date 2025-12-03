@@ -106,6 +106,9 @@ class DebugLogger:
     
     def get_log_file(self) -> Path:
         """Get current log file path"""
+        if not hasattr(self, 'log_file') or self.log_file is None:
+            # Fallback: return default log directory
+            return self.log_dir / "gui-debug.log"
         return self.log_file
     
     def cleanup_old_logs(self, keep_last: int = 5):

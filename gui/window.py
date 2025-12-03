@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QPushButton, QCheckBox, QTextEdit, QProgressBar, QGroupBox,
     QMessageBox, QFileDialog, QDialog, QComboBox, QSizePolicy
 )
-from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QThread, pyqtSignal, QAbstractAnimation
 from PyQt6.QtGui import QTextCharFormat, QColor, QFont, QMovie, QPixmap, QPainter
 
 # Import Font Awesome icon helper
@@ -19,6 +19,19 @@ try:
     from .fa_icons import get_fa_icon, apply_fa_font, FA_ICONS
 except ImportError:
     from fa_icons import get_fa_icon, apply_fa_font, FA_ICONS
+
+# Import animation helpers
+try:
+    from .animations import AnimationHelper, animate_button_hover, animate_dialog_show, animate_dialog_hide
+except ImportError:
+    try:
+        from animations import AnimationHelper, animate_button_hover, animate_dialog_show, animate_dialog_hide
+    except ImportError:
+        # Fallback if animations not available
+        AnimationHelper = None
+        animate_button_hover = None
+        animate_dialog_show = None
+        animate_dialog_hide = None
 
 # Handle imports for both direct execution and module import
 try:
@@ -100,13 +113,23 @@ class MainWindow(QMainWindow):
         # Header with GitHub icon and version
         header_layout = QHBoxLayout()
         
-        # Title
+        # Title with modern styling
         self.header_label = QLabel(t("app_name", "CachyOS Multi-Updater"))
         header_font = QFont()
         header_font.setPointSize(16)
         header_font.setBold(True)
         self.header_label.setFont(header_font)
         self.header_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        # Add subtle gradient effect via stylesheet
+        self.header_label.setStyleSheet("""
+            QLabel {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(0, 120, 212, 0.1),
+                    stop:1 transparent);
+                padding: 4px 8px;
+                border-radius: 4px;
+            }
+        """)
         header_layout.addWidget(self.header_label)
         
         # Version label (will be updated after version check)
@@ -118,7 +141,7 @@ class MainWindow(QMainWindow):
         self.version_label.setStyleSheet("color: #666;")
         self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self.version_label.setToolTip(t("gui_version_check_tooltip", "Click to check for updates"))
-        self.version_label.mousePressEvent = lambda e: self.check_version_manual()
+        self.version_label.mousePressEvent = self._on_version_label_clicked
         header_layout.addWidget(self.version_label)
         
         header_layout.addStretch()
@@ -132,7 +155,7 @@ class MainWindow(QMainWindow):
         self.language_label.setStyleSheet("color: #666; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;")
         self.language_label.setToolTip(t("gui_switch_language", "Switch Language"))
         self.language_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.language_label.mousePressEvent = lambda e: self.switch_language()
+        self.language_label.mousePressEvent = self._on_language_label_clicked
         header_layout.addWidget(self.language_label)
         
         # Theme switcher icon
@@ -140,7 +163,7 @@ class MainWindow(QMainWindow):
         self.update_theme_icon()
         self.theme_label.setToolTip(t("gui_switch_theme", "Switch Theme"))
         self.theme_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.theme_label.mousePressEvent = lambda e: self.switch_theme()
+        self.theme_label.mousePressEvent = self._on_theme_label_clicked
         header_layout.addWidget(self.theme_label)
         
         # Changelog/Release icon as clickable label
@@ -148,7 +171,7 @@ class MainWindow(QMainWindow):
         self.update_changelog_icon()
         self.changelog_label.setToolTip(t("gui_open_changelog", "Open Changelog/Releases"))
         self.changelog_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.changelog_label.mousePressEvent = lambda e: self.open_github_releases()
+        self.changelog_label.mousePressEvent = self._on_changelog_label_clicked
         header_layout.addWidget(self.changelog_label)
         
         # GitHub icon as clickable label (not button)
@@ -156,7 +179,7 @@ class MainWindow(QMainWindow):
         self.update_github_icon()
         self.github_label.setToolTip(t("gui_open_github", "Open GitHub repository"))
         self.github_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.github_label.mousePressEvent = lambda e: self.open_github()
+        self.github_label.mousePressEvent = self._on_github_label_clicked
         header_layout.addWidget(self.github_label)
         
         layout.addLayout(header_layout)
@@ -218,6 +241,16 @@ class MainWindow(QMainWindow):
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
         self.output_text.setFont(QFont("Monospace", 9))
+        # Add syntax highlighting
+        try:
+            from .syntax_highlighter import ConsoleSyntaxHighlighter
+            self.highlighter = ConsoleSyntaxHighlighter(self.output_text.document())
+        except ImportError:
+            try:
+                from syntax_highlighter import ConsoleSyntaxHighlighter
+                self.highlighter = ConsoleSyntaxHighlighter(self.output_text.document())
+            except ImportError:
+                self.highlighter = None
         layout.addWidget(self.output_text)
         
         # Buttons
@@ -331,28 +364,62 @@ class MainWindow(QMainWindow):
     def show_update_confirmation_dialog(self):
         """Show update confirmation dialog after check"""
         dialog = UpdateConfirmationDialog(self)
+        # Animate dialog appearance
+        if animate_dialog_show is not None:
+            animate_dialog_show(dialog)
         if dialog.exec():
             # User clicked "Yes" - start updates
             self.start_updates(dry_run=False)
         # If user clicked "No" or "Close", dialog just closes, nothing happens
     
     def get_sudo_password(self):
-        """Get sudo password from user or config"""
-        # Try to get from config first
+        """Get sudo password from secure storage or prompt user"""
+        # Try to get from secure storage first
+        try:
+            from .password_manager import PasswordManager
+        except ImportError:
+            try:
+                from password_manager import PasswordManager
+            except ImportError:
+                PasswordManager = None
+        
+        if PasswordManager:
+            password_manager = PasswordManager(str(self.script_dir))
+            stored_password = password_manager.get_password()
+            if stored_password:
+                return stored_password
+        
+        # Fallback: Check config (for backward compatibility with old unencrypted passwords)
         stored_password = self.config_manager.get("SUDO_PASSWORD")
         if stored_password:
-            # Password is stored, use it
+            # Migrate to secure storage
+            if PasswordManager:
+                password_manager = PasswordManager(str(self.script_dir))
+                if password_manager.is_available():
+                    password_manager.save_password(stored_password)
+                    # Remove from config
+                    config = self.config_manager.load_config()
+                    config.pop("SUDO_PASSWORD", None)
+                    self.config_manager.save_config(config)
             return stored_password
         
-        # Show password dialog
+        # If not stored, show dialog
         dialog = SudoDialog(self, save_to_config=True)
         if dialog.exec():
             password = dialog.get_password()
+            # Save securely if user wants
             if dialog.should_save_password():
-                # Save password (should be encrypted in real implementation)
-                # For now, we'll store it in config (not secure, but functional)
-                self.config_manager.set("SUDO_PASSWORD", password)
-                self.config = self.config_manager.load_config()
+                if PasswordManager:
+                    password_manager = PasswordManager(str(self.script_dir))
+                    if password_manager.is_available():
+                        password_manager.save_password(password)
+                    else:
+                        # Fallback to config (with warning)
+                        self.logger.warning("Secure password storage not available, storing in config (not recommended)")
+                        self.config_manager.set("SUDO_PASSWORD", password)
+                else:
+                    # Fallback to config
+                    self.config_manager.set("SUDO_PASSWORD", password)
             return password
         return None
     
@@ -501,6 +568,16 @@ class MainWindow(QMainWindow):
         if exit_code == 0:
             self.status_label.setText(t("gui_update_complete", "Update complete"))
             self.progress_bar.setValue(100)
+            # Show success toast
+            try:
+                from .toast_notification import show_toast
+                show_toast(self, t("gui_update_completed", "Update completed successfully"), 3000)
+            except ImportError:
+                try:
+                    from toast_notification import show_toast
+                    show_toast(self, t("gui_update_completed", "Update completed successfully"), 3000)
+                except ImportError:
+                    pass
             
             # If this was a dry-run (check), ask if user wants to update now
             if hasattr(self, '_last_was_dry_run') and self._last_was_dry_run:
@@ -510,18 +587,31 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(100, lambda: self.show_update_confirmation_dialog())
         else:
             self.status_label.setText(t("gui_update_failed", "Update failed"))
+            # Show error toast
+            try:
+                from .toast_notification import show_toast
+                show_toast(self, t("gui_update_failed", "Update failed"), 4000)
+            except ImportError:
+                try:
+                    from toast_notification import show_toast
+                    show_toast(self, t("gui_update_failed", "Update failed"), 4000)
+                except ImportError:
+                    pass
         
         self.update_runner = None
         self._last_was_dry_run = False
     
     def on_error(self, error_msg: str):
         """Handle error"""
-        QMessageBox.critical(self, "Error", error_msg)
+        QMessageBox.critical(self, t("gui_error", "Error"), error_msg)
         self.on_update_finished(1)
     
     def show_settings(self):
         """Show settings dialog"""
         dialog = ConfigDialog(str(self.script_dir), self)
+        # Animate dialog appearance
+        if animate_dialog_show is not None:
+            animate_dialog_show(dialog)
         if dialog.exec():
             self.load_config()
             # Apply theme if changed
@@ -829,11 +919,20 @@ class MainWindow(QMainWindow):
             # Keep showing local version only
             self.latest_github_version = "error"
             self.update_version_label()
+            # Cleanup thread
+            if hasattr(self, 'version_thread') and self.version_thread:
+                self.version_thread.deleteLater()
+                self.version_thread = None
             return
         
         if latest_version:
             self.latest_github_version = latest_version
             self.update_version_label()
+        
+        # Cleanup thread
+        if hasattr(self, 'version_thread') and self.version_thread:
+            self.version_thread.deleteLater()
+            self.version_thread = None
     
     def check_version_manual(self):
         """Manually check for version updates"""
@@ -866,21 +965,21 @@ class MainWindow(QMainWindow):
                         self.version_label.setStyleSheet("color: #dc3545; font-weight: bold;")
                         self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
                         self.version_label.setToolTip(t("gui_version_click_to_update", "Click to update"))
-                        self.version_label.mousePressEvent = lambda e: self.open_github_releases()
+                        self.version_label.mousePressEvent = self._on_version_label_clicked_update
                     elif github_parts == local_parts:
                         # Up to date - GREEN
                         self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
                         self.version_label.setStyleSheet("color: #28a745;")
                         self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
                         self.version_label.setToolTip(t("gui_version_up_to_date", "Version is up to date"))
-                        self.version_label.mousePressEvent = lambda e: self.check_version_manual()
+                        self.version_label.mousePressEvent = self._on_version_label_clicked
                     else:
                         # Local is newer (shouldn't happen) - GREEN
                         self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
                         self.version_label.setStyleSheet("color: #28a745;")
                         self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
                         self.version_label.setToolTip(t("gui_version_up_to_date", "Version is up to date"))
-                        self.version_label.mousePressEvent = lambda e: self.check_version_manual()
+                        self.version_label.mousePressEvent = self._on_version_label_clicked
                 except Exception as e:
                     self.version_label.setText(f"v{self.script_version} (Lokal)")
                     self.version_label.setStyleSheet("color: #666;")
@@ -889,9 +988,45 @@ class MainWindow(QMainWindow):
             self.version_label.setText(f"v{self.script_version} (Lokal)")
             self.version_label.setStyleSheet("color: #666;")
             self.version_label.setToolTip(t("gui_version_check_tooltip", "Click to check for updates"))
-            self.version_label.mousePressEvent = lambda e: self.check_version_manual()
+            self.version_label.mousePressEvent = self._on_version_label_clicked
     
     def download_update(self):
         """Open download page for update"""
         self.open_github_releases()
+    
+    def _on_version_label_clicked(self, event):
+        """Handle version label click - check for updates"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.check_version_manual()
+        event.accept()
+    
+    def _on_version_label_clicked_update(self, event):
+        """Handle version label click when update is available - open releases page"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.open_github_releases()
+        event.accept()
+    
+    def _on_language_label_clicked(self, event):
+        """Handle language label click"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.switch_language()
+        event.accept()
+    
+    def _on_theme_label_clicked(self, event):
+        """Handle theme label click"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.switch_theme()
+        event.accept()
+    
+    def _on_changelog_label_clicked(self, event):
+        """Handle changelog label click"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.open_github_releases()
+        event.accept()
+    
+    def _on_github_label_clicked(self, event):
+        """Handle GitHub label click"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.open_github()
+        event.accept()
 

@@ -42,6 +42,8 @@ class ConfigManager:
             "PACMAN_REFRESH": "true",
             "PACMAN_UPGRADE": "true",
             "PACMAN_NOCONFIRM": "true",
+            "SHORTCUT_NAME": "Update All",
+            "SHORTCUT_COMMENT": "Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak",
         }
         config.update(defaults)
         
@@ -136,4 +138,39 @@ class ConfigManager:
         config = self.load_config()
         config[key] = value
         return self.save_config(config)
+    
+    def get_password(self) -> Optional[str]:
+        """
+        Get stored sudo password (from secure storage, not config)
+        
+        Returns:
+            Password string or None
+        """
+        # Password should be stored in keyring, not config
+        # This method is for backward compatibility
+        # Real password retrieval should use PasswordManager
+        return None
+    
+    def set_password(self, password: str) -> bool:
+        """
+        Store sudo password securely (not in config file)
+        
+        Args:
+            password: Password to store
+            
+        Returns:
+            True if successful
+        """
+        # Password should be stored in keyring, not config
+        # This method is for backward compatibility
+        # Real password storage should use PasswordManager
+        # For now, we'll use a marker in config to indicate password is stored
+        if password:
+            config = self.load_config()
+            config["SUDO_PASSWORD_STORED"] = "true"  # Marker only
+            return self.save_config(config)
+        else:
+            config = self.load_config()
+            config.pop("SUDO_PASSWORD_STORED", None)
+            return self.save_config(config)
 

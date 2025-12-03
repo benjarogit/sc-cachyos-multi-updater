@@ -8,3 +8,8 @@ PyQt6>=6.6.0
 # Optional: For Font Awesome icons (if not available, falls back to emoji)
 # qtawesome>=1.2.0
 
+# Optional: For secure password storage (recommended)
+# Uses system keyring (most secure) or Fernet encryption (fallback)
+python-keyring>=24.0.0
+# Alternative: cryptography>=41.0.0 (if keyring not available)
+

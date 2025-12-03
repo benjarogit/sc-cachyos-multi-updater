@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QStandardPaths
 from PyQt6.QtGui import QIcon, QPixmap, QFont
 import os
-from pathlib import Path
+import shlex
 
 # Handle imports for both direct execution and module import
 try:
@@ -250,8 +250,10 @@ class ConfigDialog(QDialog):
         # Initial preview update
         try:
             self.update_icon_preview()
-        except Exception:
-            pass  # Ignore errors during initialization
+        except (OSError, IOError, ValueError) as e:
+            self.logger.debug(f"Failed to update icon preview during initialization: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error updating icon preview during initialization: {e}")
         
         preview_layout = QHBoxLayout()
         preview_layout.addWidget(preview_label)
@@ -549,7 +551,7 @@ class ConfigDialog(QDialog):
             self.save_sudo_password = FACheckBox(t("gui_save_password", "Save password (encrypted)"))
         else:
             self.save_sudo_password = QCheckBox(t("gui_save_password", "Save password (encrypted)"))
-        self.save_sudo_password.setToolTip(t("gui_save_password_tooltip", "Save the password in config file (currently stored in plain text - encryption coming soon)"))
+        self.save_sudo_password.setToolTip(t("gui_save_password_tooltip", "Save password securely (System Keyring or encryption)"))
         sudo_layout.addWidget(self.save_sudo_password)
         
         sudo_group.setLayout(sudo_layout)
@@ -635,8 +637,12 @@ class ConfigDialog(QDialog):
                         if 'readonly SCRIPT_VERSION=' in line:
                             local_version = line.split('"')[1] if '"' in line else line.split("'")[1]
                             break
-            except Exception:
-                pass
+            except (OSError, IOError) as e:
+                self.logger.debug(f"Failed to read script version from update-all.sh: {e}")
+            except (ValueError, IndexError) as e:
+                self.logger.debug(f"Failed to parse script version: {e}")
+            except Exception as e:
+                self.logger.warning(f"Unexpected error reading script version: {e}")
         
         # Get GitHub version
         github_version = "checking..."
@@ -656,7 +662,11 @@ class ConfigDialog(QDialog):
                 github_version = latest
             elif error:
                 github_version = f"error: {error}"
-        except Exception:
+        except (ImportError, AttributeError) as e:
+            self.logger.debug(f"Failed to check GitHub version (module import/attribute error): {e}")
+            github_version = "unavailable"
+        except Exception as e:
+            self.logger.warning(f"Unexpected error checking GitHub version: {e}")
             github_version = "unavailable"
         
         # Version comparison
@@ -668,8 +678,10 @@ class ConfigDialog(QDialog):
                 version_status = f" ({t('gui_update_available', 'Update available!')})"
             elif github_parts == local_parts:
                 version_status = f" ({t('gui_version_up_to_date', 'Up to date')})"
-        except Exception:
-            pass
+        except (ValueError, AttributeError) as e:
+            self.logger.debug(f"Failed to compare versions: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error comparing versions: {e}")
         
         tool_info = QTextEdit()
         tool_info.setReadOnly(True)
@@ -708,8 +720,19 @@ class ConfigDialog(QDialog):
                         os_info[key] = value.strip('"')
                 os_name = os_info.get('PRETTY_NAME', os_info.get('NAME', 'Unknown'))
                 system_info_text += f"{t('gui_info_os', 'Operating System')}: {os_name}\n"
-        except Exception:
-            system_info_text += f"{t('gui_info_os', 'Operating System')}: {platform.system()}\n"
+        except (OSError, IOError) as e:
+            self.logger.debug(f"Failed to read /etc/os-release: {e}")
+            try:
+                system_info_text += f"{t('gui_info_os', 'Operating System')}: {platform.system()}\n"
+            except (AttributeError, OSError) as e2:
+                self.logger.debug(f"Failed to get OS info from platform: {e2}")
+                system_info_text += f"{t('gui_info_os', 'Operating System')}: Unknown\n"
+        except Exception as e:
+            self.logger.warning(f"Unexpected error getting OS info: {e}")
+            try:
+                system_info_text += f"{t('gui_info_os', 'Operating System')}: {platform.system()}\n"
+            except Exception:
+                system_info_text += f"{t('gui_info_os', 'Operating System')}: Unknown\n"
         
         # Kernel
         try:
@@ -729,8 +752,10 @@ class ConfigDialog(QDialog):
                             cpu_info = line.split(':', 1)[1].strip()
                             break
             system_info_text += f"{t('gui_info_cpu', 'CPU')}: {cpu_info}\n"
-        except Exception:
-            pass
+        except (OSError, IOError, ValueError) as e:
+            self.logger.debug(f"Failed to get CPU info: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error getting CPU info: {e}")
         
         # Memory
         try:
@@ -746,8 +771,10 @@ class ConfigDialog(QDialog):
                 mem_used = mem_total - mem_available
                 mem_percent = (mem_used / mem_total * 100) if mem_total > 0 else 0
                 system_info_text += f"{t('gui_info_memory', 'Memory')}: {mem_used} MB / {mem_total} MB ({mem_percent:.1f}%)\n"
-        except Exception:
-            pass
+        except (OSError, IOError, ValueError, ZeroDivisionError) as e:
+            self.logger.debug(f"Failed to get memory info: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error getting memory info: {e}")
         
         # Packages
         try:
@@ -760,12 +787,16 @@ class ConfigDialog(QDialog):
             try:
                 result = subprocess.run(['flatpak', 'list'], capture_output=True, text=True, timeout=2)
                 flatpak_count = len(result.stdout.strip().split('\n')) if result.stdout.strip() else 0
-            except Exception:
-                pass
+            except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError) as e:
+                self.logger.debug(f"Failed to get flatpak package count: {e}")
+            except Exception as e:
+                self.logger.warning(f"Unexpected error getting flatpak package count: {e}")
             
             system_info_text += f"{t('gui_info_packages', 'Packages')}: {pacman_count} (pacman), {flatpak_count} (flatpak)\n"
-        except Exception:
-            pass
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError) as e:
+            self.logger.debug(f"Failed to get package counts: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error getting package counts: {e}")
         
         # Uptime
         try:
@@ -774,8 +805,10 @@ class ConfigDialog(QDialog):
                 hours = int(uptime_seconds // 3600)
                 minutes = int((uptime_seconds % 3600) // 60)
                 system_info_text += f"{t('gui_info_uptime', 'Uptime')}: {hours}h {minutes}m\n"
-        except Exception:
-            pass
+        except (OSError, IOError, ValueError) as e:
+            self.logger.debug(f"Failed to get uptime info: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error getting uptime info: {e}")
         
         system_info.setPlainText(system_info_text.strip())
         system_layout.addWidget(system_info)
@@ -876,16 +909,40 @@ class ConfigDialog(QDialog):
         self.enable_auto_update.setChecked(self.config.get("ENABLE_AUTO_UPDATE", "false") == "true")
         
         # Sudo password (don't show actual password, just indicate if stored)
-        has_stored_password = bool(self.config.get("SUDO_PASSWORD"))
+        # Check if password is stored securely
+        try:
+            from .password_manager import PasswordManager
+        except ImportError:
+            try:
+                from password_manager import PasswordManager
+            except ImportError:
+                PasswordManager = None
+        
+        has_stored_password = False
+        if PasswordManager:
+            password_manager = PasswordManager(str(self.script_dir))
+            stored_password = password_manager.get_password()
+            has_stored_password = bool(stored_password)
+            # Also check config marker for backward compatibility
+            if not has_stored_password:
+                has_stored_password = bool(self.config.get("SUDO_PASSWORD_STORED") == "true")
+        
         self.save_sudo_password.setChecked(has_stored_password)
         if has_stored_password:
-            self.sudo_password.setPlaceholderText("Password is stored (enter new to change)")
+            storage_method = self.config.get("SUDO_PASSWORD_METHOD", "secure storage")
+            self.sudo_password.setPlaceholderText(t("gui_password_stored", f"Password is stored ({storage_method}) - enter new to change"))
         
         # System - Pacman (set defaults if not in config)
         self.pacman_sync.setChecked(self.config.get("PACMAN_SYNC", "true") == "true")
         self.pacman_refresh.setChecked(self.config.get("PACMAN_REFRESH", "true") == "true")
         self.pacman_upgrade.setChecked(self.config.get("PACMAN_UPGRADE", "true") == "true")
         self.pacman_noconfirm.setChecked(self.config.get("PACMAN_NOCONFIRM", "true") == "true")
+        
+        # Desktop shortcut name/comment
+        if hasattr(self, 'shortcut_name'):
+            self.shortcut_name.setText(self.config.get("SHORTCUT_NAME", "Update All"))
+        if hasattr(self, 'shortcut_comment'):
+            self.shortcut_comment.setText(self.config.get("SHORTCUT_COMMENT", "Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak"))
         
         # Advanced
         self.github_repo.setText(self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater"))
@@ -913,18 +970,55 @@ class ConfigDialog(QDialog):
         self.config["DRY_RUN"] = str(self.dry_run.isChecked()).lower()
         self.config["ENABLE_AUTO_UPDATE"] = str(self.enable_auto_update.isChecked()).lower()
         
-        # Sudo password (only save if provided and checkbox is checked)
-        if hasattr(self, 'sudo_password') and self.sudo_password.text():
+        # Sudo password (save securely using PasswordManager)
+        try:
+            from .password_manager import PasswordManager
+        except ImportError:
+            try:
+                from password_manager import PasswordManager
+            except ImportError:
+                PasswordManager = None
+        
+        if PasswordManager and hasattr(self, 'sudo_password') and self.sudo_password.text():
+            password = self.sudo_password.text()
             if hasattr(self, 'save_sudo_password') and self.save_sudo_password.isChecked():
-                self.config["SUDO_PASSWORD"] = self.sudo_password.text()
+                # Save password securely
+                password_manager = PasswordManager(str(self.script_dir))
+                if password_manager.is_available():
+                    if password_manager.save_password(password):
+                        # Store marker in config (not the password itself)
+                        self.config["SUDO_PASSWORD_STORED"] = "true"
+                        self.config["SUDO_PASSWORD_METHOD"] = password_manager.get_storage_method()
+                    else:
+                        # Fallback: warn user
+                        from PyQt6.QtWidgets import QMessageBox
+                        QMessageBox.warning(
+                            self,
+                            t("gui_error", "Error"),
+                            t("gui_password_save_failed", "Failed to save password securely. Please install python-keyring or cryptography.")
+                        )
+                else:
+                    # No secure storage available
+                    from PyQt6.QtWidgets import QMessageBox
+                    QMessageBox.warning(
+                        self,
+                        t("gui_error", "Error"),
+                        t("gui_password_storage_unavailable", "Secure password storage not available. Please install python-keyring or cryptography.")
+                    )
             else:
-                # Remove password if checkbox unchecked
-                if "SUDO_PASSWORD" in self.config:
-                    del self.config["SUDO_PASSWORD"]
+                # Don't save password if checkbox is unchecked
+                if PasswordManager:
+                    password_manager = PasswordManager(str(self.script_dir))
+                    password_manager.delete_password()
+                self.config.pop("SUDO_PASSWORD_STORED", None)
+                self.config.pop("SUDO_PASSWORD_METHOD", None)
         elif hasattr(self, 'save_sudo_password') and not self.save_sudo_password.isChecked():
-            # Remove password if checkbox unchecked
-            if "SUDO_PASSWORD" in self.config:
-                del self.config["SUDO_PASSWORD"]
+            # Remove password if checkbox is unchecked
+            if PasswordManager:
+                password_manager = PasswordManager(str(self.script_dir))
+                password_manager.delete_password()
+            self.config.pop("SUDO_PASSWORD_STORED", None)
+            self.config.pop("SUDO_PASSWORD_METHOD", None)
         
         # Advanced
         if self.github_repo.text():
@@ -935,6 +1029,12 @@ class ConfigDialog(QDialog):
             self.config["STATS_DIR"] = self.stats_dir.text()
         if self.script_path.text():
             self.config["SCRIPT_PATH"] = self.script_path.text()
+        
+        # Desktop shortcut name/comment
+        if hasattr(self, 'shortcut_name'):
+            self.config["SHORTCUT_NAME"] = self.shortcut_name.text() or "Update All"
+        if hasattr(self, 'shortcut_comment'):
+            self.config["SHORTCUT_COMMENT"] = self.shortcut_comment.text() or "Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak"
         
         # GUI Language
         self.config["GUI_LANGUAGE"] = self.gui_language.itemData(self.gui_language.currentIndex())
@@ -974,8 +1074,10 @@ class ConfigDialog(QDialog):
                 self.icon_browse_btn.setVisible(False)
             # Update preview
             self.update_icon_preview()
-        except Exception:
-            pass  # Ignore errors
+        except (OSError, IOError, ValueError) as e:
+            self.logger.debug(f"Failed to update icon preview: {e}")
+        except Exception as e:
+            self.logger.warning(f"Unexpected error updating icon preview: {e}")
     
     def browse_icon_file(self):
         """Browse for custom icon file"""
@@ -1112,6 +1214,22 @@ class ConfigDialog(QDialog):
             # Create desktop entry content
             script_abs_path = script_path.absolute()
             
+            # Helper function to escape desktop entry values
+            def escape_desktop_entry_value(value: str) -> str:
+                """Escape value for desktop entry file according to Desktop Entry Specification"""
+                if not value:
+                    return ""
+                # Escape according to Desktop Entry Specification
+                # Order matters: backslash must be escaped first!
+                return (value
+                    .replace('\\', '\\\\')  # Backslash first!
+                    .replace('\n', '\\n')
+                    .replace('\r', '\\r')
+                    .replace('=', '\\=')
+                    .replace('[', '\\[')
+                    .replace(']', '\\]')
+                    .replace(';', '\\;'))
+            
             # Determine which version to use (Console or GUI)
             use_gui = self.shortcut_version_gui.isChecked()
             
@@ -1119,7 +1237,8 @@ class ConfigDialog(QDialog):
                 # GUI version
                 gui_script = script_dir / "gui" / "main.py"
                 if gui_script.exists():
-                    exec_cmd = f'python3 "{gui_script.absolute()}"'
+                    # Use shlex.quote() for shell injection protection
+                    exec_cmd = f'python3 {shlex.quote(str(gui_script.absolute()))}'
                     terminal = "false"
                 else:
                     QMessageBox.warning(
@@ -1133,14 +1252,22 @@ class ConfigDialog(QDialog):
                 # Console version
                 wrapper_script = script_dir / "run-update.sh"
                 if wrapper_script.exists():
-                    exec_cmd = f'konsole --hold -e "{wrapper_script.absolute()}"'
+                    # Use shlex.quote() for shell injection protection
+                    exec_cmd = f'konsole --hold -e {shlex.quote(str(wrapper_script.absolute()))}'
                 else:
-                    exec_cmd = f'konsole --hold -e "bash \\"{script_abs_path}\\""'
+                    # Use shlex.quote() for shell injection protection
+                    exec_cmd = f'konsole --hold -e bash {shlex.quote(str(script_abs_path))}'
                 terminal = "true"
             
+            # Escape desktop entry values
+            name_value = escape_desktop_entry_value(self.shortcut_name.text() or "Update All")
+            comment_value = escape_desktop_entry_value(
+                self.shortcut_comment.text() or "Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak"
+            )
+            
             desktop_entry = f"""[Desktop Entry]
-Name={self.shortcut_name.text() or "Update All"}
-Comment={self.shortcut_comment.text() or "Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak"}
+Name={name_value}
+Comment={comment_value}
 Exec={exec_cmd}
 Icon={icon_value}
 Terminal={terminal}
@@ -1189,5 +1316,5 @@ Categories=System;
         if self.save_config():
             self.accept()
         else:
-            QMessageBox.warning(self, "Error", "Failed to save configuration")
+            QMessageBox.warning(self, t("gui_error", "Error"), t("gui_config_save_failed", "Failed to save configuration"))
 

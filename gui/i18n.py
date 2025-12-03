@@ -32,7 +32,14 @@ class GUIi18n:
                             lang = line.split("=", 1)[1].strip()
                             if lang and lang != "auto":
                                 return lang
-            except:
+            except (OSError, IOError) as e:
+                # Failed to read config file - will detect from system
+                pass
+            except (ValueError, AttributeError) as e:
+                # Failed to parse config - will detect from system
+                pass
+            except Exception as e:
+                # Unexpected error - will detect from system
                 pass
         
         # Detect from system
