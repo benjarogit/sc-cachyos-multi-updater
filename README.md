@@ -116,8 +116,8 @@ This script does all of that automatically, saving you time and ensuring everyth
 
 **Option A: Using Git (recommended)**
 ```bash
-git clone https://github.com/SunnyCueq/cachyos-multi-updater.git
-cd cachyos-multi-updater
+git clone https://github.com/benjarogit/sc-cachyos-multi-updater.git
+cd sc-cachyos-multi-updater
 ```
 
 **Option B: Download as ZIP**
