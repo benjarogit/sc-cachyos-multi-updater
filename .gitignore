@@ -66,3 +66,7 @@ CHANGELOG.md
 tests/
 
 .cursor/
+__pycache__/
+*.pyc
+*.pyo
+__pycache__
