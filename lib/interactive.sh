@@ -19,11 +19,11 @@ interactive_mode() {
     echo -e "${COLOR_BOLD}🎮 $(t 'interactive_mode')${COLOR_RESET}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "$(t 'which_components_update')"
+    t 'which_components_update'
     echo ""
 
     # System-Updates
-    read -p "  [1] $(t 'system_pacman')        (J/n): " -n 1 REPLY_SYSTEM
+    read -r -p "  [1] $(t 'system_pacman')        (J/n): " -n 1 REPLY_SYSTEM
     echo ""
     if [[ ! "$REPLY_SYSTEM" =~ ^[Nn]$ ]]; then
         UPDATE_SYSTEM=true
@@ -34,7 +34,7 @@ interactive_mode() {
     fi
 
     # AUR-Updates
-    read -p "  [2] $(t 'aur_yay_paru')         (J/n): " -n 1 REPLY_AUR
+    read -r -p "  [2] $(t 'aur_yay_paru')         (J/n): " -n 1 REPLY_AUR
     echo ""
     if [[ ! "$REPLY_AUR" =~ ^[Nn]$ ]]; then
         UPDATE_AUR=true
@@ -45,7 +45,7 @@ interactive_mode() {
     fi
 
     # Cursor
-    read -p "  [3] $(t 'cursor_editor')          (J/n): " -n 1 REPLY_CURSOR
+    read -r -p "  [3] $(t 'cursor_editor')          (J/n): " -n 1 REPLY_CURSOR
     echo ""
     if [[ ! "$REPLY_CURSOR" =~ ^[Nn]$ ]]; then
         UPDATE_CURSOR=true
@@ -56,7 +56,7 @@ interactive_mode() {
     fi
 
     # AdGuard Home
-    read -p "  [4] $(t 'adguard_home')           (J/n): " -n 1 REPLY_ADGUARD
+    read -r -p "  [4] $(t 'adguard_home')           (J/n): " -n 1 REPLY_ADGUARD
     echo ""
     if [[ ! "$REPLY_ADGUARD" =~ ^[Nn]$ ]]; then
         UPDATE_ADGUARD=true
@@ -67,7 +67,7 @@ interactive_mode() {
     fi
 
     # Flatpak
-    read -p "  [5] $(t 'flatpak')                (J/n): " -n 1 REPLY_FLATPAK
+    read -r -p "  [5] $(t 'flatpak')                (J/n): " -n 1 REPLY_FLATPAK
     echo ""
     if [[ ! "$REPLY_FLATPAK" =~ ^[Nn]$ ]]; then
         UPDATE_FLATPAK=true
@@ -82,7 +82,7 @@ interactive_mode() {
     echo ""
 
     # Bestätigung
-    echo "$(t 'selected_updates')"
+    t 'selected_updates'
     [ "$UPDATE_SYSTEM" = "true" ] && echo "  ✅ $(t 'system_updates')"
     [ "$UPDATE_AUR" = "true" ] && echo "  ✅ $(t 'aur_updates')"
     [ "$UPDATE_CURSOR" = "true" ] && echo "  ✅ $(t 'cursor_editor_update')"
@@ -90,11 +90,11 @@ interactive_mode() {
     [ "$UPDATE_FLATPAK" = "true" ] && echo "  ✅ $(t 'flatpak_updates')"
 
     echo ""
-    read -p "$(t 'continue_question') " -n 1 REPLY_CONTINUE
+    read -r -p "$(t 'continue_question') " -n 1 REPLY_CONTINUE
     echo ""
 
     if [[ "$REPLY_CONTINUE" =~ ^[Nn]$ ]]; then
-        echo "$(t 'cancelled')"
+        t 'cancelled'
         exit 0
     fi
 

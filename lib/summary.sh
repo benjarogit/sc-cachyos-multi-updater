@@ -86,7 +86,7 @@ show_dry_run_summary() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo -e "${COLOR_WARNING}$(t 'no_changes_made')${COLOR_RESET}"
-    echo "$(t 'run_without_dry_run')"
+    t 'run_without_dry_run'
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""

@@ -37,7 +37,7 @@ else
     echo "❌ Update mit Fehler beendet (Exit-Code: $EXIT_CODE)"
 fi
 echo ""
-read -p "Drücke Enter zum Beenden..." || sleep 5
+read -r -p "Drücke Enter zum Beenden..." || sleep 5
 
 exit $EXIT_CODE
 

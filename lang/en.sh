@@ -7,6 +7,7 @@
 # Licensed under the MIT License (see LICENSE file)
 
 # Associative array with all English translations
+# shellcheck disable=SC2034 # Variable wird in lib/i18n.sh verwendet
 declare -A TRANSLATIONS_EN
 
 # General

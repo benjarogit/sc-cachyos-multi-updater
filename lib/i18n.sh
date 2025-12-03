@@ -55,6 +55,7 @@ if [ ! -f "$LANG_FILE" ]; then
 fi
 
 # Lade Sprachdatei
+# shellcheck disable=SC1090 # Dynamischer Pfad, wird zur Laufzeit bestimmt
 source "$LANG_FILE"
 
 # ========== Translation Function ==========

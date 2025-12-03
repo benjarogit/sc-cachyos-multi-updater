@@ -116,7 +116,7 @@ check_available_updates() {
                 # Prüfe ob Updates im AUR verfügbar sind (nicht nur installierte Version vergleichen!)
                 if pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
                     CURSOR_AUR_VERSION_FULL=$(pacman -Q cursor-bin | awk '{print $2}')
-                    CURSOR_AUR_VERSION=$(echo "$CURSOR_AUR_VERSION_FULL" | sed 's/-.*$//')
+                    CURSOR_AUR_VERSION="${CURSOR_AUR_VERSION_FULL%%-*}"
                     
                     # WICHTIG: Prüfe ob Updates im AUR verfügbar sind
                     AUR_UPDATE_AVAILABLE=false

@@ -59,7 +59,7 @@ echo "  1) --dry-run      (Test-Modus, keine Änderungen)"
 echo "  2) --interactive   (Interaktive Auswahl der Komponenten)"
 echo "  3) Standard        (Automatisch, alle Updates)"
 echo ""
-read -p "Wähle Modus (1-3, Standard: 3): " mode_choice
+read -r -p "Wähle Modus (1-3, Standard: 3): " mode_choice
 mode_choice=${mode_choice:-3}
 
 case "$mode_choice" in
@@ -87,7 +87,7 @@ echo -e "${COLOR_SUCCESS}✅ Gewählter Modus: $MODE_NAME${COLOR_RESET}"
 echo ""
 
 # Frage nach Desktop-Verknüpfung
-read -p "Desktop-Verknüpfung erstellen? (j/N): " create_desktop
+read -r -p "Desktop-Verknüpfung erstellen? (j/N): " create_desktop
 create_desktop=${create_desktop:-n}
 
 if [[ "$create_desktop" =~ ^[jJyY]$ ]]; then
