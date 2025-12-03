@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # ========== Version ==========
-readonly SCRIPT_VERSION="1.0.4"
+readonly SCRIPT_VERSION="1.0.5"
 readonly GITHUB_REPO="SunnyCueq/cachyos-multi-updater"
 
 # ========== Exit-Codes ==========
@@ -613,6 +613,23 @@ if [ "$UPDATE_AUR" = "true" ]; then
             if yay -Syu --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
                 AUR_UPDATED=true
                 log_success "$(t 'log_aur_update_success_yay')"
+                
+                # Entferne verwaiste AUR-Pakete (nicht mehr gepflegte Pakete)
+                AUR_ORPHANS=$(yay -Qtd 2>/dev/null || true)
+                if [ -n "$AUR_ORPHANS" ]; then
+                    log_info "$(t 'log_removing_aur_orphans')"
+                    ORPHAN_COUNT=$(echo "$AUR_ORPHANS" | wc -l)
+                    echo "$AUR_ORPHANS" | while read -r orphan; do
+                        if [ -n "$orphan" ]; then
+                            log_info "Entferne verwaistes AUR-Paket: $orphan"
+                            yay -Rns "$orphan" --noconfirm 2>&1 | tee -a "$LOG_FILE" || log_warning "Fehler beim Entfernen von $orphan"
+                        fi
+                    done
+                    log_success "$(t 'log_aur_orphans_removed') ($ORPHAN_COUNT $(t 'packages'))"
+                else
+                    log_info "$(t 'log_no_aur_orphans')"
+                fi
+                
                 show_aur_update_result "$AUR_PACKAGES"
                 show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'aur_updates')" "✅"
             else
@@ -625,6 +642,23 @@ if [ "$UPDATE_AUR" = "true" ]; then
             if paru -Syu --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
                 AUR_UPDATED=true
                 log_success "$(t 'log_aur_update_success_paru')"
+                
+                # Entferne verwaiste AUR-Pakete (nicht mehr gepflegte Pakete)
+                AUR_ORPHANS=$(paru -Qtd 2>/dev/null || true)
+                if [ -n "$AUR_ORPHANS" ]; then
+                    log_info "$(t 'log_removing_aur_orphans')"
+                    ORPHAN_COUNT=$(echo "$AUR_ORPHANS" | wc -l)
+                    echo "$AUR_ORPHANS" | while read -r orphan; do
+                        if [ -n "$orphan" ]; then
+                            log_info "Entferne verwaistes AUR-Paket: $orphan"
+                            paru -Rns "$orphan" --noconfirm 2>&1 | tee -a "$LOG_FILE" || log_warning "Fehler beim Entfernen von $orphan"
+                        fi
+                    done
+                    log_success "$(t 'log_aur_orphans_removed') ($ORPHAN_COUNT $(t 'packages'))"
+                else
+                    log_info "$(t 'log_no_aur_orphans')"
+                fi
+                
                 show_aur_update_result "$AUR_PACKAGES"
                 show_progress $CURRENT_STEP $TOTAL_STEPS "$(t 'aur_updates')" "✅"
             else
@@ -1508,7 +1542,10 @@ if [ "$UPDATE_FLATPAK" = "true" ]; then
 
             if [ "$FLATPAK_UPDATES" -gt 0 ] 2>/dev/null; then
                 # Verwende --noninteractive für vollständig automatische Updates
-                if flatpak update --noninteractive -y 2>&1 | grep -E "^(Installing |Updating |Removing )" | tee -a "$LOG_FILE"; then
+                # WICHTIG: Prüfe Exit-Code, nicht grep-Output (flatpak gibt "Nichts zu tun." aus wenn keine Updates)
+                FLATPAK_OUTPUT=$(flatpak update --noninteractive -y 2>&1 | tee -a "$LOG_FILE")
+                FLATPAK_EXIT_CODE=$?
+                if [ $FLATPAK_EXIT_CODE -eq 0 ]; then
                     FLATPAK_UPDATED=true
                     FLATPAK_PACKAGES="$FLATPAK_UPDATES"
                     log_success "$(t 'log_flatpak_update_success') ($FLATPAK_UPDATES $(t 'log_flatpak_updates_updated'))"
