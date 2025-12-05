@@ -78,19 +78,23 @@ class ConfigDialog(QDialog):
         general_tab = self.create_general_tab()
         tabs.addTab(general_tab, t("gui_tab_general", "General"))
         
-        # Tab 3: Logs
+        # Tab 3: Desktop Shortcut
+        desktop_tab = self.create_desktop_tab()
+        tabs.addTab(desktop_tab, t("gui_desktop_shortcut", "Desktop Shortcut"))
+        
+        # Tab 4: Logs
         logs_tab = self.create_logs_tab()
         tabs.addTab(logs_tab, t("gui_tab_logs", "Logs"))
         
-        # Tab 4: System
+        # Tab 5: System
         system_tab = self.create_system_tab()
         tabs.addTab(system_tab, t("gui_tab_system", "System"))
         
-        # Tab 5: Advanced Settings
+        # Tab 6: Advanced Settings
         advanced_tab = self.create_advanced_tab()
         tabs.addTab(advanced_tab, t("gui_tab_advanced", "Advanced"))
         
-        # Tab 6: Info
+        # Tab 7: Info
         info_tab = self.create_info_tab()
         tabs.addTab(info_tab, t("gui_tab_info", "Info"))
         
@@ -171,36 +175,54 @@ class ConfigDialog(QDialog):
         widget.setLayout(layout)
         return widget
     
-    def create_general_tab(self):
-        """Create general settings tab"""
+    def create_desktop_tab(self):
+        """Create desktop shortcut tab"""
         widget = QWidget()
         layout = QVBoxLayout()
-        
-        # Desktop Shortcut section
-        desktop_group = QGroupBox(t("gui_desktop_shortcut", "Desktop Shortcut"))
-        desktop_layout = QVBoxLayout()
+        layout.setSpacing(16)
         
         desktop_info = QLabel(t("gui_desktop_shortcut_info", "Create a desktop shortcut for easy access"))
         desktop_info.setWordWrap(True)
-        desktop_layout.addWidget(desktop_info)
+        layout.addWidget(desktop_info)
         
-        # Shortcut name and comment
-        shortcut_name_layout = QFormLayout()
+        # Form layout for name and comment
+        name_comment_form = QFormLayout()
+        name_comment_form.setSpacing(16)
+        name_comment_form.setVerticalSpacing(16)
+        name_comment_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        
+        # Shortcut name
         self.shortcut_name = QLineEdit()
         self.shortcut_name.setPlaceholderText("Update All")
         self.shortcut_name.setText("Update All")
-        shortcut_name_layout.addRow(t("gui_shortcut_name", "Name:"), self.shortcut_name)
+        self.shortcut_name.setMinimumWidth(500)
+        name_comment_form.addRow(t("gui_shortcut_name", "Name:"), self.shortcut_name)
         
+        # Shortcut comment
         self.shortcut_comment = QLineEdit()
         self.shortcut_comment.setPlaceholderText("Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak")
         self.shortcut_comment.setText("Ein-Klick-Update für CachyOS + AUR + Cursor + AdGuard + Flatpak")
-        shortcut_name_layout.addRow(t("gui_shortcut_comment", "Comment:"), self.shortcut_comment)
+        self.shortcut_comment.setMinimumWidth(500)
+        name_comment_form.addRow(t("gui_shortcut_comment", "Comment:"), self.shortcut_comment)
         
-        desktop_layout.addLayout(shortcut_name_layout)
+        layout.addLayout(name_comment_form)
         
-        # Icon selection
-        icon_layout = QHBoxLayout()
-        icon_layout.addWidget(QLabel(t("gui_icon", "Icon:")))
+        # Icon selection with preview side by side
+        icon_form_layout = QFormLayout()
+        icon_form_layout.setSpacing(16)
+        icon_form_layout.setVerticalSpacing(16)
+        icon_form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        
+        icon_container = QWidget()
+        icon_container_layout = QHBoxLayout()
+        icon_container_layout.setSpacing(20)
+        icon_container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Icon selection (left side)
+        icon_selection_widget = QWidget()
+        icon_selection_layout = QVBoxLayout()
+        icon_selection_layout.setSpacing(8)
+        icon_selection_layout.setContentsMargins(0, 0, 0, 0)
         
         self.desktop_icon = QComboBox()
         # Common system icons (ensured unique icons)
@@ -212,39 +234,60 @@ class ConfigDialog(QDialog):
             ("system-file-manager", t("gui_icon_preferences_system", "Preferences System")),
             ("utilities-terminal", t("gui_icon_terminal", "Terminal")),
         ]
-        for icon_name, icon_label in system_icons:
-            self.desktop_icon.addItem(icon_label, icon_name)
+        for icon_name, icon_label_text in system_icons:
+            self.desktop_icon.addItem(icon_label_text, icon_name)
         
         # Custom icon option
         self.desktop_icon.addItem(t("gui_icon_custom", "Custom Icon File..."), "custom")
-        icon_layout.addWidget(self.desktop_icon)
+        icon_selection_layout.addWidget(self.desktop_icon)
         
         # Custom icon file selector (hidden by default)
         self.custom_icon_path = QLineEdit()
         self.custom_icon_path.setPlaceholderText(t("gui_icon_custom_path", "Select icon file (PNG, SVG, etc.)"))
         self.custom_icon_path.setVisible(False)
         self.icon_browse_btn = QPushButton("...")
-        self.icon_browse_btn.setMaximumWidth(40)
+        self.icon_browse_btn.setFixedWidth(40)
         self.icon_browse_btn.clicked.connect(lambda: self.browse_icon_file())
         self.icon_browse_btn.setVisible(False)
         
-        icon_path_layout = QHBoxLayout()
-        icon_path_layout.addWidget(self.custom_icon_path)
-        icon_path_layout.addWidget(self.icon_browse_btn)
+        custom_icon_layout = QHBoxLayout()
+        custom_icon_layout.setContentsMargins(0, 0, 0, 0)
+        custom_icon_layout.setSpacing(8)
+        custom_icon_layout.addWidget(self.custom_icon_path)
+        custom_icon_layout.addWidget(self.icon_browse_btn)
+        icon_selection_layout.addLayout(custom_icon_layout)
         
         # Show/hide custom icon path based on selection
         self.desktop_icon.currentIndexChanged.connect(self.on_icon_selection_changed)
         
-        desktop_layout.addLayout(icon_layout)
-        desktop_layout.addLayout(icon_path_layout)
+        icon_selection_widget.setLayout(icon_selection_layout)
+        icon_container_layout.addWidget(icon_selection_widget)
         
-        # Icon preview
+        # Icon preview (right side)
+        preview_container = QWidget()
+        preview_layout = QVBoxLayout()
+        preview_layout.setSpacing(8)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        
         preview_label = QLabel(t("gui_icon_preview", "Preview:"))
+        preview_layout.addWidget(preview_label)
+        
         self.icon_preview = QLabel()
-        self.icon_preview.setFixedSize(64, 64)
-        self.icon_preview.setStyleSheet("border: 1px solid #ccc; background-color: #f0f0f0;")
+        self.icon_preview.setMinimumSize(96, 96)
+        self.icon_preview.setMaximumSize(96, 96)
         self.icon_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        # Don't set text - it will be set by update_icon_preview() or show pixmap
+        self.icon_preview.setScaledContents(True)
+        preview_layout.addWidget(self.icon_preview)
+        preview_layout.addStretch()
+        
+        preview_container.setLayout(preview_layout)
+        icon_container_layout.addWidget(preview_container)
+        icon_container.setLayout(icon_container_layout)
+        
+        # Add icon container to form layout with label
+        icon_form_layout.addRow(t("gui_icon", "Icon:"), icon_container)
+        layout.addLayout(icon_form_layout)
+        
         # Connect signals (update_icon_preview is called from on_icon_selection_changed, so no duplicate)
         self.custom_icon_path.textChanged.connect(self.update_icon_preview)
         # Initial preview update
@@ -255,36 +298,33 @@ class ConfigDialog(QDialog):
         except Exception as e:
             self.logger.warning(f"Unexpected error updating icon preview during initialization: {e}")
         
-        preview_layout = QHBoxLayout()
-        preview_layout.addWidget(preview_label)
-        preview_layout.addWidget(self.icon_preview)
-        preview_layout.addStretch()
-        desktop_layout.addLayout(preview_layout)
+        # Options section (Version and Location) - side by side
+        options_container = QWidget()
+        options_layout = QHBoxLayout()
+        options_layout.setSpacing(24)
+        options_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Shortcut version selection (Console or GUI)
-        shortcut_version_layout = QVBoxLayout()
-        shortcut_version_label = QLabel(t("gui_shortcut_version", "Shortcut Type:"))
-        shortcut_version_layout.addWidget(shortcut_version_label)
-        
-        shortcut_version_radio_layout = QHBoxLayout()
+        # Shortcut version selection (left)
+        version_group = QGroupBox(t("gui_shortcut_version", "Shortcut Type"))
+        version_layout = QVBoxLayout()
+        version_layout.setSpacing(8)
         
         # Radio buttons for version selection
         self.shortcut_version_console = QRadioButton(t("gui_shortcut_version_console", "Console Version"))
         self.shortcut_version_gui = QRadioButton(t("gui_shortcut_version_gui", "GUI Version"))
         self.shortcut_version_gui.setChecked(True)  # Default to GUI
         
-        shortcut_version_radio_layout.addWidget(self.shortcut_version_console)
-        shortcut_version_radio_layout.addWidget(self.shortcut_version_gui)
-        shortcut_version_radio_layout.addStretch()
-        shortcut_version_layout.addLayout(shortcut_version_radio_layout)
-        desktop_layout.addLayout(shortcut_version_layout)
+        version_layout.addWidget(self.shortcut_version_console)
+        version_layout.addWidget(self.shortcut_version_gui)
+        version_layout.addStretch()
         
-        # Shortcut type (where to create)
-        shortcut_type_layout = QVBoxLayout()
-        shortcut_type_label = QLabel(t("gui_shortcut_type", "Create shortcut:"))
-        shortcut_type_layout.addWidget(shortcut_type_label)
+        version_group.setLayout(version_layout)
+        options_layout.addWidget(version_group)
         
-        shortcut_checkbox_layout = QHBoxLayout()
+        # Shortcut location (right)
+        location_group = QGroupBox(t("gui_shortcut_type", "Create Shortcut"))
+        location_layout = QVBoxLayout()
+        location_layout.setSpacing(8)
         
         # Try to use Font Awesome checkboxes
         try:
@@ -307,19 +347,29 @@ class ConfigDialog(QDialog):
         self.shortcut_app_menu.setChecked(True)
         self.shortcut_desktop.setChecked(False)
         
-        shortcut_checkbox_layout.addWidget(self.shortcut_app_menu)
-        shortcut_checkbox_layout.addWidget(self.shortcut_desktop)
-        shortcut_checkbox_layout.addStretch()
-        shortcut_type_layout.addLayout(shortcut_checkbox_layout)
-        desktop_layout.addLayout(shortcut_type_layout)
+        location_layout.addWidget(self.shortcut_app_menu)
+        location_layout.addWidget(self.shortcut_desktop)
+        location_layout.addStretch()
+        
+        location_group.setLayout(location_layout)
+        options_layout.addWidget(location_group)
+        
+        options_container.setLayout(options_layout)
+        layout.addWidget(options_container)
         
         # Create shortcut button
         create_shortcut_btn = QPushButton(t("gui_create_shortcut", "Create Desktop Shortcut"))
         create_shortcut_btn.clicked.connect(self.create_desktop_shortcut)
-        desktop_layout.addWidget(create_shortcut_btn)
+        layout.addWidget(create_shortcut_btn)
         
-        desktop_group.setLayout(desktop_layout)
-        layout.addWidget(desktop_group)
+        layout.addStretch()
+        widget.setLayout(layout)
+        return widget
+    
+    def create_general_tab(self):
+        """Create general settings tab"""
+        widget = QWidget()
+        layout = QVBoxLayout()
         
         # GUI Language & Theme section
         appearance_group = QGroupBox(t("gui_appearance", "Appearance"))
@@ -1103,6 +1153,22 @@ class ConfigDialog(QDialog):
     
     def update_icon_preview(self):
         """Update icon preview"""
+        # Update preview border color based on theme
+        try:
+            from .theme_manager import ThemeManager
+        except ImportError:
+            from theme_manager import ThemeManager
+        
+        theme_mode = self.config_manager.get("GUI_THEME", "auto")
+        if theme_mode == "auto":
+            actual_theme = ThemeManager.detect_system_theme()
+        else:
+            actual_theme = theme_mode
+        
+        border_color = "#555555" if actual_theme == "dark" else "#cccccc"
+        bg_color = "#2b2b2b" if actual_theme == "dark" else "#f0f0f0"
+        self.icon_preview.setStyleSheet(f"border: 1px solid {border_color}; border-radius: 4px; background-color: {bg_color};")
+        
         icon_data = self.desktop_icon.itemData(self.desktop_icon.currentIndex())
         
         if icon_data == "custom":
@@ -1110,7 +1176,7 @@ class ConfigDialog(QDialog):
             if icon_path and os.path.exists(icon_path):
                 pixmap = QPixmap(icon_path)
                 if not pixmap.isNull():
-                    pixmap = pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    pixmap = pixmap.scaled(96, 96, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     self.icon_preview.clear()  # Clear any text first
                     self.icon_preview.setPixmap(pixmap)
                     return
@@ -1135,7 +1201,7 @@ class ConfigDialog(QDialog):
                         break
             
             if not icon.isNull():
-                pixmap = icon.pixmap(64, 64)
+                pixmap = icon.pixmap(96, 96)
                 if not pixmap.isNull():
                     self.icon_preview.clear()  # Clear any text first
                     self.icon_preview.setPixmap(pixmap)
@@ -1152,7 +1218,7 @@ class ConfigDialog(QDialog):
                         if os.path.exists(test_path):
                             pixmap = QPixmap(test_path)
                             if not pixmap.isNull():
-                                pixmap = pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                                pixmap = pixmap.scaled(96, 96, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                                 self.icon_preview.clear()
                                 self.icon_preview.setPixmap(pixmap)
                                 return

@@ -31,19 +31,22 @@ class FACheckBox(QWidget):
         
         # Check icon label
         self.check_label = QLabel()
+        self.check_label.setObjectName("fa_checkbox_indicator")
         self.check_label.setFixedSize(18, 18)
         self.check_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.check_label.setStyleSheet("""
-            border: 2px solid #ccc;
-            border-radius: 3px;
-            background-color: transparent;
+            QLabel#fa_checkbox_indicator {
+                border: 2px solid #ccc;
+                border-radius: 3px;
+                background-color: transparent;
+            }
         """)
         self.update_check_icon()
         layout.addWidget(self.check_label)
         
         # Text label
         self.text_label = QLabel(text)
-        self.text_label.setStyleSheet("color: inherit;")
+        self.text_label.setObjectName("fa_checkbox_text")
         layout.addWidget(self.text_label)
         
         layout.addStretch()
@@ -64,18 +67,23 @@ class FACheckBox(QWidget):
                 self.check_label.setText(FA_ICONS.get('check', '✓'))
                 apply_fa_font(self.check_label, size=12)
             self.check_label.setStyleSheet("""
-                border: 2px solid #0078d4;
-                border-radius: 3px;
-                background-color: #0078d4;
-                color: #ffffff;
+                QLabel#fa_checkbox_indicator {
+                    border: 2px solid #00D9FF;
+                    border-radius: 3px;
+                    background-color: #00D9FF;
+                    color: #ffffff;
+                }
             """)
         else:
-            # Empty checkbox
+            # Empty checkbox - border color will be set by theme stylesheet
+            # Using a default color that will be overridden by theme
             self.check_label.clear()
             self.check_label.setStyleSheet("""
-                border: 2px solid #ccc;
-                border-radius: 3px;
-                background-color: transparent;
+                QLabel#fa_checkbox_indicator {
+                    border: 2px solid #cccccc;
+                    border-radius: 3px;
+                    background-color: transparent;
+                }
             """)
     
     def mousePressEvent(self, event):

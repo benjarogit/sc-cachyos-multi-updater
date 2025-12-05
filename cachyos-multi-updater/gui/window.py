@@ -9,7 +9,8 @@ import re
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QCheckBox, QTextEdit, QProgressBar, QGroupBox,
-    QMessageBox, QFileDialog, QDialog, QComboBox, QSizePolicy, QProgressDialog, QApplication
+    QMessageBox, QFileDialog, QDialog, QComboBox, QSizePolicy, QProgressDialog, QApplication,
+    QGraphicsOpacityEffect
 )
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QThread, pyqtSignal, QAbstractAnimation
 from PyQt6.QtGui import QTextCharFormat, QColor, QFont, QMovie, QPixmap, QPainter
@@ -68,6 +69,10 @@ class MainWindow(QMainWindow):
         self.latest_version = None
         self.latest_github_version = None
         self.version_thread = None
+        self.language_feedback_timer = None  # Timer for language switcher feedback effect
+        self.language_feedback_effect = None  # Current opacity effect for feedback
+        self.language_feedback_restore_func = None  # Store restore function for disconnect
+        self.language_feedback_original_effect = None  # Store original effect before feedback
         
         self.setWindowTitle(t("app_name", "CachyOS Multi-Updater"))
         self.setMinimumWidth(800)
@@ -146,17 +151,41 @@ class MainWindow(QMainWindow):
         
         header_layout.addStretch()
         
-        # Language switcher icon
-        self.language_label = QLabel("DE")
-        language_font = QFont()
-        language_font.setPointSize(12)
-        language_font.setBold(True)
-        self.language_label.setFont(language_font)
-        self.language_label.setStyleSheet("color: #666; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;")
-        self.language_label.setToolTip(t("gui_switch_language", "Switch Language"))
-        self.language_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.language_label.mousePressEvent = self._on_language_label_clicked
-        header_layout.addWidget(self.language_label)
+        # Language switcher with icon and text (horizontal layout)
+        language_widget = QWidget()
+        language_layout = QHBoxLayout()
+        language_layout.setContentsMargins(6, 4, 6, 4)
+        language_layout.setSpacing(6)
+        language_widget.setLayout(language_layout)
+        
+        # Language icon
+        self.language_icon_label = QLabel()
+        self.language_icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        language_layout.addWidget(self.language_icon_label)
+        
+        # Language text (pixel font style) - right of icon
+        current_lang = self.config_manager.get("GUI_LANGUAGE", "auto")
+        if current_lang == "auto":
+            import os
+            lang = os.environ.get("LANG", "en_US.UTF-8")
+            lang = lang.split("_")[0].split(".")[0].lower()
+            current_lang = "de" if lang == "de" else "en"
+        
+        self.language_text_label = QLabel("DE" if current_lang == "de" else "EN")
+        language_text_font = QFont("Courier", 9)
+        language_text_font.setBold(True)
+        self.language_text_label.setFont(language_text_font)
+        self.language_text_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        language_layout.addWidget(self.language_text_label)
+        
+        # Update language icon and text colors (must be called after both labels are created)
+        self.update_language_icon()
+        
+        # Make entire widget clickable
+        language_widget.setCursor(Qt.CursorShape.PointingHandCursor)
+        language_widget.mousePressEvent = self._on_language_label_clicked
+        language_widget.setToolTip(t("gui_switch_language", "Switch Language"))
+        header_layout.addWidget(language_widget)
         
         # Theme switcher icon
         self.theme_label = QLabel()
@@ -330,15 +359,9 @@ class MainWindow(QMainWindow):
         """Load config and update UI"""
         self.config = self.config_manager.load_config()
         
-        # Update language label
-        current_lang = self.config_manager.get("GUI_LANGUAGE", "auto")
-        if current_lang == "auto":
-            import os
-            lang = os.environ.get("LANG", "en_US.UTF-8")
-            lang = lang.split("_")[0].split(".")[0].lower()
-            current_lang = "de" if lang == "de" else "en"
-        if hasattr(self, 'language_label'):
-            self.language_label.setText("EN" if current_lang == "en" else "DE")
+        # Update language icon and text
+        if hasattr(self, 'update_language_icon'):
+            self.update_language_icon()
         
         # Update theme icon
         if hasattr(self, 'theme_label'):
@@ -744,6 +767,8 @@ class MainWindow(QMainWindow):
         # Update icons
         self.update_theme_icon()
         self.update_github_icon()
+        self.update_changelog_icon()
+        self.update_language_icon()
     
     def update_changelog_icon(self):
         """Update Changelog icon color based on current theme"""
@@ -754,8 +779,8 @@ class MainWindow(QMainWindow):
         else:
             actual_theme = current_theme
         
-        # Choose color based on theme
-        icon_color = '#24292e' if actual_theme == "light" else '#ffffff'
+        # Choose color based on theme (CachyOS colors - white for dark, black for light)
+        icon_color = "#000000" if actual_theme == "light" else "#ffffff"
         
         icon, text = get_fa_icon('list-alt', "", size=20, color=icon_color)
         if icon:
@@ -803,7 +828,22 @@ class MainWindow(QMainWindow):
             icon_name = 'adjust'
             tooltip = t("gui_theme_auto", "Automatic (System)")
         
-        icon, text = get_fa_icon(icon_name, "", size=18)
+        # Get current theme for icon color
+        try:
+            from .theme_manager import ThemeManager
+        except ImportError:
+            from theme_manager import ThemeManager
+        
+        theme_mode = self.config_manager.get("GUI_THEME", "auto")
+        if theme_mode == "auto":
+            actual_theme = ThemeManager.detect_system_theme()
+        else:
+            actual_theme = theme_mode
+        
+        # Set icon color based on theme (CachyOS colors)
+        icon_color = "#ffffff" if actual_theme == "dark" else "#000000"
+        
+        icon, text = get_fa_icon(icon_name, "", size=18, color=icon_color)
         if icon:
             pixmap = icon.pixmap(20, 20)
             self.theme_label.setPixmap(pixmap)
@@ -811,9 +851,60 @@ class MainWindow(QMainWindow):
             self.theme_label.setText(FA_ICONS.get(icon_name, ''))
             fa_font = QFont("FontAwesome", 16)
             self.theme_label.setFont(fa_font)
-            self.theme_label.setStyleSheet("color: #666;")
+            self.theme_label.setStyleSheet(f"color: {icon_color};")
         
         self.theme_label.setToolTip(f"{t('gui_switch_theme', 'Switch Theme')} ({tooltip})")
+    
+    def update_language_icon(self):
+        """Update language icon and text based on current language"""
+        # Check if widgets exist
+        if not hasattr(self, 'language_icon_label') or self.language_icon_label is None:
+            return
+        
+        current_lang = self.config_manager.get("GUI_LANGUAGE", "auto")
+        if current_lang == "auto":
+            import os
+            lang = os.environ.get("LANG", "en_US.UTF-8")
+            lang = lang.split("_")[0].split(".")[0].lower()
+            current_lang = "de" if lang == "de" else "en"
+        
+        # Get current theme for icon color
+        try:
+            from .theme_manager import ThemeManager
+        except ImportError:
+            from theme_manager import ThemeManager
+        
+        theme_mode = self.config_manager.get("GUI_THEME", "auto")
+        if theme_mode == "auto":
+            actual_theme = ThemeManager.detect_system_theme()
+        else:
+            actual_theme = theme_mode
+        
+        # Set icon color based on theme (CachyOS colors)
+        icon_color = "#ffffff" if actual_theme == "dark" else "#000000"
+        text_color = "#ffffff" if actual_theme == "dark" else "#000000"
+        
+        # Use language icon
+        icon, text = get_fa_icon('language', "", size=18, color=icon_color)
+        if icon:
+            pixmap = icon.pixmap(20, 20)
+            self.language_icon_label.setPixmap(pixmap)
+        else:
+            self.language_icon_label.setText(FA_ICONS.get('language', '🌐'))
+            fa_font = QFont("FontAwesome", 16)
+            self.language_icon_label.setFont(fa_font)
+            self.language_icon_label.setStyleSheet(f"color: {icon_color};")
+        
+        # Update text label with explicit color
+        if hasattr(self, 'language_text_label') and self.language_text_label is not None:
+            self.language_text_label.setText("DE" if current_lang == "de" else "EN")
+            self.language_text_label.setStyleSheet(f"color: {text_color};")
+        
+        # Update tooltip
+        lang_name = "Deutsch" if current_lang == "de" else "English"
+        parent = self.language_icon_label.parent()
+        if parent:
+            parent.setToolTip(f"{t('gui_switch_language', 'Switch Language')} ({lang_name})")
     
     def switch_language(self):
         """Switch language between DE and EN"""
@@ -840,11 +931,21 @@ class MainWindow(QMainWindow):
         else:
             init_i18n(str(self.script_dir))
         
-        # Update UI texts
-        self.update_ui_texts()
+        # Update language icon and text first (before UI update to avoid conflicts)
+        try:
+            self.update_language_icon()
+        except Exception as e:
+            import traceback
+            print(f"Error updating language icon: {e}")
+            traceback.print_exc()
         
-        # Update language label
-        self.language_label.setText("EN" if new_lang == "en" else "DE")
+        # Update UI texts
+        try:
+            self.update_ui_texts()
+        except Exception as e:
+            import traceback
+            print(f"Error updating UI texts: {e}")
+            traceback.print_exc()
     
     def update_ui_texts(self):
         """Update all UI texts after language change"""
@@ -891,7 +992,19 @@ class MainWindow(QMainWindow):
             self.output_label.setText(t("gui_output", "Output:"))
         
         # Tooltips
-        self.language_label.setToolTip(t("gui_switch_language", "Switch Language"))
+        # Language switcher tooltip is updated in update_language_icon()
+        if hasattr(self, 'language_icon_label') and self.language_icon_label is not None:
+            parent = self.language_icon_label.parent()
+            if parent:
+                current_lang = self.config_manager.get("GUI_LANGUAGE", "auto")
+                if current_lang == "auto":
+                    import os
+                    lang = os.environ.get("LANG", "en_US.UTF-8")
+                    lang = lang.split("_")[0].split(".")[0].lower()
+                    current_lang = "de" if lang == "de" else "en"
+                lang_name = "Deutsch" if current_lang == "de" else "English"
+                parent.setToolTip(f"{t('gui_switch_language', 'Switch Language')} ({lang_name})")
+        
         current_theme = self.config_manager.get("GUI_THEME", "auto")
         if current_theme == "light":
             tooltip = t("gui_theme_light", "Light")
@@ -899,8 +1012,10 @@ class MainWindow(QMainWindow):
             tooltip = t("gui_theme_dark", "Dark")
         else:
             tooltip = t("gui_theme_auto", "Automatic (System)")
-        self.theme_label.setToolTip(f"{t('gui_switch_theme', 'Switch Theme')} ({tooltip})")
-        self.github_label.setToolTip(t("gui_open_github", "Open GitHub repository"))
+        if hasattr(self, 'theme_label') and self.theme_label is not None:
+            self.theme_label.setToolTip(f"{t('gui_switch_theme', 'Switch Theme')} ({tooltip})")
+        if hasattr(self, 'github_label') and self.github_label is not None:
+            self.github_label.setToolTip(t("gui_open_github", "Open GitHub repository"))
         
         # Update version label if available
         if hasattr(self, 'version_checker') and self.version_checker and self.latest_version:
@@ -2062,9 +2177,95 @@ class MainWindow(QMainWindow):
             )
     
     def _on_language_label_clicked(self, event):
-        """Handle language label click"""
+        """Handle language label click with feedback effect"""
         if event.button() == Qt.MouseButton.LeftButton:
-            self.switch_language()
+            # Get the widget that was clicked (the parent widget)
+            widget = None
+            if hasattr(self, 'language_icon_label') and self.language_icon_label is not None:
+                widget = self.language_icon_label.parent()
+            
+            # Cancel any pending restore operation from previous clicks
+            if self.language_feedback_timer and self.language_feedback_timer.isActive():
+                self.language_feedback_timer.stop()
+            
+            # Visual feedback: briefly change opacity using QGraphicsOpacityEffect
+            original_effect = None
+            if widget and widget.isVisible():
+                try:
+                    # Store original effect BEFORE clearing any existing feedback effect
+                    # This ensures we can restore it later
+                    current_effect = widget.graphicsEffect()
+                    
+                    # If there's already a feedback effect active, use the stored original effect
+                    if self.language_feedback_effect and current_effect == self.language_feedback_effect:
+                        # Restore the original effect that was stored before the first feedback
+                        original_effect = self.language_feedback_original_effect
+                        # Clear the current feedback effect
+                        widget.setGraphicsEffect(None)
+                    else:
+                        # No feedback effect active, store the current effect as original
+                        original_effect = current_effect
+                        # Save it for future clicks
+                        self.language_feedback_original_effect = original_effect
+                    
+                    # Create and apply opacity effect
+                    opacity_effect = QGraphicsOpacityEffect()
+                    opacity_effect.setOpacity(0.6)
+                    widget.setGraphicsEffect(opacity_effect)
+                    self.language_feedback_effect = opacity_effect  # Store reference
+                    QApplication.processEvents()
+                except Exception:
+                    pass  # Ignore effect errors
+            
+            # Switch language
+            try:
+                self.switch_language()
+            except Exception as e:
+                # Log error but don't crash
+                import traceback
+                print(f"Error switching language: {e}")
+                traceback.print_exc()
+            
+            # Restore original effect after short delay
+            # Define restore_effect function outside the if widget block to avoid NameError
+            def restore_effect():
+                try:
+                    if widget and widget.isVisible():
+                        # Only restore if the current effect is still our feedback effect
+                        current_effect = widget.graphicsEffect()
+                        if current_effect == self.language_feedback_effect:
+                            # Restore original effect (or None if there was none)
+                            widget.setGraphicsEffect(original_effect)
+                            self.language_feedback_effect = None
+                            # Clear stored original effect after restoration
+                            self.language_feedback_original_effect = None
+                except Exception:
+                    pass  # Ignore restore errors
+            
+            # Only set up timer if widget exists
+            if widget:
+                # Create timer if it doesn't exist
+                if self.language_feedback_timer is None:
+                    self.language_feedback_timer = QTimer()
+                    self.language_feedback_timer.setSingleShot(True)
+                    self.language_feedback_timer.timeout.connect(restore_effect)
+                    self.language_feedback_restore_func = restore_effect
+                else:
+                    # Disconnect previous connection if it exists
+                    if self.language_feedback_restore_func is not None:
+                        try:
+                            self.language_feedback_timer.timeout.disconnect(self.language_feedback_restore_func)
+                        except TypeError:
+                            # If disconnect fails, try disconnecting all (fallback)
+                            try:
+                                self.language_feedback_timer.timeout.disconnect()
+                            except TypeError:
+                                pass  # No connections to disconnect
+                    # Connect new restore function
+                    self.language_feedback_timer.timeout.connect(restore_effect)
+                    self.language_feedback_restore_func = restore_effect
+                
+                self.language_feedback_timer.start(150)
         event.accept()
     
     def _on_theme_label_clicked(self, event):
