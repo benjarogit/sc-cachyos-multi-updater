@@ -85,3 +85,7 @@ __pycache__
 
 # VERSION file (local only, not committed)
 VERSION
+
+# Custom Widgets Library (removed, not needed)
+cachyos-multi-updater/gui/custom_widgets.py
+cachyos-multi-updater/gui/custom_widgets_lib/

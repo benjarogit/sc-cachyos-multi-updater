@@ -36,9 +36,9 @@ class FACheckBox(QWidget):
         self.check_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.check_label.setStyleSheet("""
             QLabel#fa_checkbox_indicator {
-                border: 2px solid #ccc;
-                border-radius: 3px;
-                background-color: transparent;
+            border: 2px solid #ccc;
+            border-radius: 3px;
+            background-color: transparent;
             }
         """)
         self.update_check_icon()
@@ -69,9 +69,9 @@ class FACheckBox(QWidget):
             self.check_label.setStyleSheet("""
                 QLabel#fa_checkbox_indicator {
                     border: 2px solid #00D9FF;
-                    border-radius: 3px;
+                border-radius: 3px;
                     background-color: #00D9FF;
-                    color: #ffffff;
+                color: #ffffff;
                 }
             """)
         else:
@@ -81,8 +81,8 @@ class FACheckBox(QWidget):
             self.check_label.setStyleSheet("""
                 QLabel#fa_checkbox_indicator {
                     border: 2px solid #cccccc;
-                    border-radius: 3px;
-                    background-color: transparent;
+                border-radius: 3px;
+                background-color: transparent;
                 }
             """)
     

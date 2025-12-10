@@ -8,8 +8,10 @@ from pathlib import Path
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QSpinBox,
     QPushButton, QGroupBox, QLineEdit, QFileDialog, QComboBox, QTextEdit,
-    QTabWidget, QWidget, QFormLayout, QMessageBox, QRadioButton
+    QTabWidget, QWidget, QFormLayout, QMessageBox, QRadioButton, QStackedWidget,
+    QListWidget, QListWidgetItem
 )
+
 from PyQt6.QtCore import Qt, QStandardPaths
 from PyQt6.QtGui import QIcon, QPixmap, QFont
 import os
@@ -49,7 +51,7 @@ class ConfigDialog(QDialog):
     def __init__(self, script_dir: str, parent=None):
         super().__init__(parent)
         self.logger = get_logger()
-        self.logger.info(f"Initializing ConfigDialog with script_dir: {script_dir}")
+        self.logger.info(f"ConfigDialog initialized with script_dir: {script_dir}")
         try:
             self.script_dir = script_dir
             self.config_manager = ConfigManager(script_dir)
@@ -65,44 +67,91 @@ class ConfigDialog(QDialog):
             raise
     
     def init_ui(self):
-        """Initialize UI"""
-        layout = QVBoxLayout()
+        """Initialize UI with sidebar navigation"""
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(12)
         
-        # Create tabs
-        tabs = QTabWidget()
+        # Create sidebar (left) - use QListWidget for navigation
+        sidebar = QListWidget()
+        sidebar.setMaximumWidth(200)
+        sidebar.setSpacing(2)
+        sidebar.setCurrentRow(0)
+        sidebar.currentRowChanged.connect(self.on_sidebar_changed)
         
-        # Tab 1: Update Components
+        # Create stacked widget (right) - standard QStackedWidget
+        self.stacked_widget = QStackedWidget()
+        
+        # Add all tabs to stacked widget and sidebar
+        self.tab_pages = []
+        
+        # Page 1: Update Components
         components_tab = self.create_components_tab()
-        tabs.addTab(components_tab, t("gui_tab_components", "Update Components"))
+        self.stacked_widget.addWidget(components_tab)
+        self.tab_pages.append(("gui_tab_components", "Update Components"))
+        sidebar.addItem(QListWidgetItem(t("gui_tab_components", "Update Components")))
         
-        # Tab 2: General Settings
+        # Page 2: General Settings
         general_tab = self.create_general_tab()
-        tabs.addTab(general_tab, t("gui_tab_general", "General"))
+        self.stacked_widget.addWidget(general_tab)
+        self.tab_pages.append(("gui_tab_general", "General"))
+        sidebar.addItem(QListWidgetItem(t("gui_tab_general", "General")))
         
-        # Tab 3: Shortcut
+        # Page 3: Shortcut
         desktop_tab = self.create_desktop_tab()
-        tabs.addTab(desktop_tab, t("gui_shortcut", "Shortcut"))
+        self.stacked_widget.addWidget(desktop_tab)
+        self.tab_pages.append(("gui_shortcut", "Shortcut"))
+        sidebar.addItem(QListWidgetItem(t("gui_shortcut", "Shortcut")))
         
-        # Tab 4: Logs
+        # Page 4: Logs
         logs_tab = self.create_logs_tab()
-        tabs.addTab(logs_tab, t("gui_tab_logs", "Logs"))
+        self.stacked_widget.addWidget(logs_tab)
+        self.tab_pages.append(("gui_tab_logs", "Logs"))
+        sidebar.addItem(QListWidgetItem(t("gui_tab_logs", "Logs")))
         
-        # Tab 5: System
+        # Page 5: System
         system_tab = self.create_system_tab()
-        tabs.addTab(system_tab, t("gui_tab_system", "System"))
+        self.stacked_widget.addWidget(system_tab)
+        self.tab_pages.append(("gui_tab_system", "System"))
+        sidebar.addItem(QListWidgetItem(t("gui_tab_system", "System")))
         
-        # Tab 6: Advanced Settings
+        # Page 6: Advanced Settings
         advanced_tab = self.create_advanced_tab()
-        tabs.addTab(advanced_tab, t("gui_tab_advanced", "Advanced"))
+        self.stacked_widget.addWidget(advanced_tab)
+        self.tab_pages.append(("gui_tab_advanced", "Advanced"))
+        sidebar.addItem(QListWidgetItem(t("gui_tab_advanced", "Advanced")))
         
-        # Tab 7: Info
+        # Page 7: Info
         info_tab = self.create_info_tab()
-        tabs.addTab(info_tab, t("gui_tab_info", "Info"))
+        self.stacked_widget.addWidget(info_tab)
+        self.tab_pages.append(("gui_tab_info", "Info"))
+        sidebar.addItem(QListWidgetItem(t("gui_tab_info", "Info")))
         
-        layout.addWidget(tabs)
+        # Page 8: Update (NEW - Tool Update Management)
+        update_tab = self.create_update_tab()
+        self.stacked_widget.addWidget(update_tab)
+        self.tab_pages.append(("gui_tab_update", "Update"))
+        sidebar.addItem(QListWidgetItem(t("gui_tab_update", "Update")))
+        
+        # Store sidebar reference
+        self.sidebar = sidebar
+        
+        # Add sidebar and stacked widget to main layout (following PyQt best practices)
+        # Sidebar takes minimal space (stretch factor 0), content takes remaining (stretch factor 1)
+        main_layout.addWidget(sidebar, 0)  # Sidebar takes minimal space
+        main_layout.addWidget(self.stacked_widget, 1)  # Content takes remaining space
+        
+        # Create container widget for main layout
+        container = QWidget()
+        container.setLayout(main_layout)
+        
+        # Create outer layout for buttons
+        layout = QVBoxLayout()
+        layout.addWidget(container)
         
         # Buttons
         button_layout = QHBoxLayout()
+        button_layout.setContentsMargins(12, 12, 12, 12)
         
         icon, text = get_fa_icon('undo', "Reset to Defaults")
         reset_btn = QPushButton(icon, text) if icon else QPushButton(text)
@@ -130,6 +179,12 @@ class ConfigDialog(QDialog):
         
         layout.addLayout(button_layout)
         self.setLayout(layout)
+    
+    def on_sidebar_changed(self, index: int):
+        """Handle sidebar selection change (QListWidget)"""
+        if 0 <= index < self.stacked_widget.count():
+            self.stacked_widget.setCurrentIndex(index)
+    
     
     def create_components_tab(self):
         """Create update components tab"""
@@ -1415,6 +1470,283 @@ Categories=System;
                 t("gui_error", "Error"),
                 t("gui_shortcut_failed", "Failed to create desktop shortcut:") + f"\n{str(e)}"
             )
+    
+    def create_update_tab(self):
+        """Create update tab for tool update management"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Version Check Section
+        version_group = QGroupBox(t("gui_version_check_section", "Version Check"))
+        version_layout = QVBoxLayout()
+        
+        # Version display
+        self.update_local_version_label = QLabel()
+        self.update_github_version_label = QLabel()
+        self.update_status_label = QLabel()
+        
+        version_layout.addWidget(QLabel(t("gui_local_version", "Local Version") + ":"))
+        version_layout.addWidget(self.update_local_version_label)
+        version_layout.addWidget(QLabel(t("gui_github_version", "GitHub Version") + ":"))
+        version_layout.addWidget(self.update_github_version_label)
+        version_layout.addWidget(self.update_status_label)
+        
+        # Check for updates button
+        check_update_btn = QPushButton(t("gui_check_for_updates", "Check for Updates"))
+        check_update_btn.clicked.connect(self.check_tool_version)
+        version_layout.addWidget(check_update_btn)
+        
+        version_group.setLayout(version_layout)
+        layout.addWidget(version_group)
+        
+        # Update Section
+        update_group = QGroupBox(t("gui_perform_update", "Perform Update"))
+        update_layout = QVBoxLayout()
+        
+        update_info = QLabel(t("gui_update_info", "Update the tool to the latest version from GitHub."))
+        update_info.setWordWrap(True)
+        update_layout.addWidget(update_info)
+        
+        self.start_update_btn = QPushButton(t("gui_start_update", "Start Update"))
+        self.start_update_btn.clicked.connect(self.start_tool_update)
+        self.start_update_btn.setEnabled(False)  # Disabled until update available
+        update_layout.addWidget(self.start_update_btn)
+        
+        update_group.setLayout(update_layout)
+        layout.addWidget(update_group)
+        
+        # Version Downgrade Section
+        downgrade_group = QGroupBox(t("gui_downgrade_version", "Downgrade Version"))
+        downgrade_layout = QVBoxLayout()
+        
+        downgrade_warning = QLabel(t("gui_version_downgrade_warning", "Warning: This only changes the VERSION file. For a full reinstallation, use 'Perform Update'."))
+        downgrade_warning.setWordWrap(True)
+        downgrade_warning.setStyleSheet("color: #dc3545;")
+        downgrade_layout.addWidget(downgrade_warning)
+        
+        version_input_layout = QHBoxLayout()
+        version_input_layout.addWidget(QLabel(t("gui_set_version", "Set Version") + ":"))
+        self.version_input = QLineEdit()
+        self.version_input.setPlaceholderText("1.0.15")
+        version_input_layout.addWidget(self.version_input)
+        
+        set_version_btn = QPushButton(t("gui_set_version", "Set Version"))
+        set_version_btn.clicked.connect(self.set_version)
+        version_input_layout.addWidget(set_version_btn)
+        
+        downgrade_layout.addLayout(version_input_layout)
+        downgrade_group.setLayout(downgrade_layout)
+        layout.addWidget(downgrade_group)
+        
+        layout.addStretch()
+        widget.setLayout(layout)
+        
+        # Initialize version display
+        self.update_version_display()
+        
+        return widget
+    
+    def update_version_display(self):
+        """Update version display in update tab"""
+        import re
+        root_dir = Path(self.script_dir).parent
+        version_file = root_dir / "VERSION"
+        local_version = "unknown"
+        
+        if version_file.exists():
+            try:
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    version = f.read().strip()
+                    if re.match(r'^\d+\.\d+\.\d+$', version):
+                        local_version = version
+            except Exception:
+                pass
+        
+        # Fallback to update-all.sh
+        if local_version == "unknown":
+            script_path = Path(self.script_dir) / "update-all.sh"
+            if script_path.exists():
+                try:
+                    with open(script_path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if 'readonly SCRIPT_VERSION=' in line:
+                                match = re.search(r'["\']([0-9.]+)["\']', line)
+                                if match:
+                                    local_version = match.group(1)
+                                    break
+                except Exception:
+                    pass
+        
+        self.update_local_version_label.setText(f"v{local_version}")
+        
+        # Check GitHub version
+        try:
+            from .version_checker import VersionChecker
+        except ImportError:
+            try:
+                from version_checker import VersionChecker
+            except ImportError:
+                VersionChecker = None
+        
+        if VersionChecker:
+            github_repo = self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater")
+            checker = VersionChecker(str(self.script_dir), github_repo)
+            latest, error = checker.check_latest_version()
+            
+            if latest and not error:
+                self.update_github_version_label.setText(f"v{latest}")
+                comparison = checker.compare_versions(local_version, latest)
+                
+                if comparison < 0:
+                    # Update available
+                    self.update_status_label.setText(t("gui_update_available", "Update available!"))
+                    self.update_status_label.setStyleSheet("color: #dc3545; font-weight: bold;")
+                    self.start_update_btn.setEnabled(True)
+                elif comparison == 0:
+                    # Up to date
+                    self.update_status_label.setText(t("gui_version_up_to_date", "Up to date"))
+                    self.update_status_label.setStyleSheet("color: #28a745;")
+                    self.start_update_btn.setEnabled(False)
+                else:
+                    # Local is newer
+                    self.update_status_label.setText(t("gui_version_dev", "Development version (local is newer)"))
+                    self.update_status_label.setStyleSheet("color: #28a745;")
+                    self.start_update_btn.setEnabled(False)
+            else:
+                self.update_github_version_label.setText(t("gui_version_check_failed", "Version check failed"))
+                self.update_status_label.setText("")
+                self.start_update_btn.setEnabled(False)
+        else:
+            self.update_github_version_label.setText("unavailable")
+            self.update_status_label.setText("")
+            self.start_update_btn.setEnabled(False)
+    
+    def check_tool_version(self):
+        """Check for tool version updates"""
+        self.update_version_display()
+        QMessageBox.information(
+            self,
+            t("gui_version_check_complete", "Version Check Complete"),
+            t("gui_version_check_complete_msg", "Version check completed. See status above.")
+        )
+    
+    def start_tool_update(self):
+        """Start tool update (opens update dialog)"""
+        try:
+            from .update_dialog import UpdateDialog
+        except ImportError:
+            try:
+                from update_dialog import UpdateDialog
+            except ImportError:
+                QMessageBox.warning(
+                    self,
+                    t("gui_update_failed", "Update Failed"),
+                    t("gui_update_dialog_not_found", "Update dialog not found. Please update manually.")
+                )
+                return
+        
+        # Get versions
+        import re
+        root_dir = Path(self.script_dir).parent
+        version_file = root_dir / "VERSION"
+        local_version = "unknown"
+        
+        if version_file.exists():
+            try:
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    version = f.read().strip()
+                    if re.match(r'^\d+\.\d+\.\d+$', version):
+                        local_version = version
+            except Exception:
+                pass
+        
+        # Get GitHub version
+        from .version_checker import VersionChecker
+        github_repo = self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater")
+        checker = VersionChecker(str(self.script_dir), github_repo)
+        latest, error = checker.check_latest_version()
+        
+        if not latest or error:
+            QMessageBox.warning(
+                self,
+                t("gui_update_failed", "Update Failed"),
+                t("gui_version_check_failed", "Version check failed")
+            )
+            return
+        
+        # Open update dialog
+        dialog = UpdateDialog(
+            str(self.script_dir),
+            local_version,
+            latest,
+            checker,
+            parent=self
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Update was performed, refresh display
+            self.update_version_display()
+    
+    def set_version(self):
+        """Set version in VERSION file"""
+        version_text = self.version_input.text().strip()
+        
+        if not version_text:
+            QMessageBox.warning(
+                self,
+                t("gui_error", "Error"),
+                t("gui_version_empty", "Version cannot be empty")
+            )
+            return
+        
+        # Validate version format
+        import re
+        if not re.match(r'^\d+\.\d+\.\d+$', version_text):
+            QMessageBox.warning(
+                self,
+                t("gui_error", "Error"),
+                t("gui_version_invalid", "Invalid version format. Use format: X.Y.Z (e.g., 1.0.15)")
+            )
+            return
+        
+        # Confirm
+        reply = QMessageBox.question(
+            self,
+            t("gui_confirm", "Confirm"),
+            t("gui_set_version_confirm", "Set version to {version}?\n\nThis only changes the VERSION file.").format(version=version_text),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # Write VERSION file
+        root_dir = Path(self.script_dir).parent
+        version_file = root_dir / "VERSION"
+        
+        try:
+            with open(version_file, 'w', encoding='utf-8') as f:
+                f.write(version_text)
+            
+            QMessageBox.information(
+                self,
+                t("gui_success", "Success"),
+                t("gui_version_set_success", "Version set to {version}").format(version=version_text)
+            )
+            
+            # Refresh display
+            self.update_version_display()
+            self.version_input.clear()
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                t("gui_error", "Error"),
+                t("gui_version_set_failed", "Failed to set version:\n\n{error}").format(error=str(e))
+            )
+    
+    def on_sidebar_changed(self, index: int):
+        """Handle sidebar list widget change"""
+        self.stacked_widget.setCurrentIndex(index)
     
     def save_and_close(self):
         """Save config and close dialog"""

@@ -9,6 +9,22 @@ from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, pyqtSigna
 from PyQt6.QtGui import QFont, QColor
 from typing import Optional, Callable
 
+# Handle imports for both direct execution and module import
+try:
+    from .debug_logger import get_logger
+except ImportError:
+    try:
+        from debug_logger import get_logger
+    except ImportError:
+        def get_logger():
+            class DummyLogger:
+                def debug(self, *args, **kwargs): pass
+                def info(self, *args, **kwargs): pass
+                def warning(self, *args, **kwargs): pass
+                def error(self, *args, **kwargs): pass
+                def exception(self, *args, **kwargs): pass
+            return DummyLogger()
+
 
 class ToastNotification(QWidget):
     """Toast notification widget"""
@@ -17,6 +33,8 @@ class ToastNotification(QWidget):
     
     def __init__(self, message: str, duration: int = 3000, parent=None):
         super().__init__(parent)
+        self.logger = get_logger()
+        self.logger.debug(f"ToastNotification created: {message[:50]}...")
         self.message = message
         self.duration = duration
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool)

@@ -24,6 +24,8 @@ class UpdateConfirmationDialog(QDialog):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.logger = get_logger()
+        self.logger.debug("UpdateConfirmationDialog initialized")
         self.setWindowTitle(t("gui_updates_available", "Updates Available"))
         self.setMinimumWidth(450)
         self.setModal(True)  # Modal dialog - only closes itself, not parent

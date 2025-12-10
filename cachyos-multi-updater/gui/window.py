@@ -51,6 +51,7 @@ except ImportError:
     from update_confirmation_dialog import UpdateConfirmationDialog
 
 
+
 class MainWindow(QMainWindow):
     """Main application window"""
     
@@ -90,6 +91,7 @@ class MainWindow(QMainWindow):
         self.language_feedback_effect = None  # Current opacity effect for feedback
         self.language_feedback_restore_func = None  # Store restore function for disconnect
         self.language_feedback_original_effect = None  # Store original effect before feedback
+        self.update_toast_shown = False  # Track if update toast was shown this session
         
         self.setWindowTitle(t("app_name", "CachyOS Multi-Updater"))
         self.setMinimumWidth(800)
@@ -219,10 +221,13 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         
         layout = QVBoxLayout()
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
         central_widget.setLayout(layout)
         
         # Header with GitHub icon and version
         header_layout = QHBoxLayout()
+        header_layout.setSpacing(8)
         
         # Title with modern styling
         self.header_label = QLabel(t("app_name", "CachyOS Multi-Updater"))
@@ -254,6 +259,25 @@ class MainWindow(QMainWindow):
         self.version_label.setToolTip(t("gui_version_check_tooltip", "Click to check for updates"))
         self.version_label.mousePressEvent = self._on_version_label_clicked
         header_layout.addWidget(self.version_label)
+        
+        # Update badge (shown when update is available)
+        self.update_badge = QLabel()
+        self.update_badge.setVisible(False)
+        self.update_badge.setStyleSheet("""
+            QLabel {
+                background-color: #dc3545;
+                color: white;
+                border-radius: 8px;
+                padding: 2px 6px;
+                font-size: 9px;
+                font-weight: bold;
+            }
+        """)
+        self.update_badge.setText("NEW")
+        self.update_badge.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_badge.setToolTip(t("gui_update_available", "Update available"))
+        self.update_badge.mousePressEvent = self._on_version_label_clicked_update
+        header_layout.addWidget(self.update_badge)
         
         header_layout.addStretch()
         
@@ -322,6 +346,7 @@ class MainWindow(QMainWindow):
         # Update components group
         self.components_group = QGroupBox(t("gui_update_components", "Update Components"))
         components_layout = QVBoxLayout()
+        components_layout.setSpacing(6)
         
         # Try to use Font Awesome checkboxes, fallback to regular checkboxes
         try:
@@ -386,10 +411,11 @@ class MainWindow(QMainWindow):
                 self.highlighter = ConsoleSyntaxHighlighter(self.output_text.document())
             except ImportError:
                 self.highlighter = None
-        layout.addWidget(self.output_text)
+        layout.addWidget(self.output_text, 1)  # Stretch factor 1: expand to fill available space
         
         # Buttons
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(8)
         
         # Check for Updates button
         icon, text = get_fa_icon('search', t("gui_check_for_updates", "Check for Updates"))
@@ -1266,11 +1292,56 @@ class MainWindow(QMainWindow):
         if latest_version:
             self.latest_github_version = latest_version
             self.update_version_label()
+            
+            # Show toast notification if update is available (only once per session)
+            if not self.update_toast_shown:
+                try:
+                    from .version_checker import VersionChecker
+                except ImportError:
+                    try:
+                        from version_checker import VersionChecker
+                    except ImportError:
+                        VersionChecker = None
+                
+                if VersionChecker and self.version_checker:
+                    comparison = self.version_checker.compare_versions(
+                        self.script_version,
+                        latest_version
+                    )
+                    
+                    if comparison < 0:
+                        # Update available - show toast
+                        self.show_update_toast()
+                        self.update_toast_shown = True
         
         # Cleanup thread
         if hasattr(self, 'version_thread') and self.version_thread:
             self.version_thread.deleteLater()
             self.version_thread = None
+    
+    def show_update_toast(self):
+        """Show toast notification for available update"""
+        try:
+            from .toast_notification import show_toast
+        except ImportError:
+            try:
+                from toast_notification import show_toast
+            except ImportError:
+                return  # Toast not available
+        
+        message = t("gui_update_available", "Update available")
+        if self.latest_github_version:
+            message += f": v{self.latest_github_version}"
+        message += f"\n{t('gui_version_click_to_update', 'Click to update')}"
+        
+        toast = show_toast(self, message, duration=5000)
+        
+        # Make toast clickable to open update dialog
+        def on_toast_clicked():
+            self._on_version_label_clicked_update(None)
+        
+        toast.label.mousePressEvent = lambda e: on_toast_clicked() if e.button() == Qt.MouseButton.LeftButton else None
+        toast.label.setCursor(Qt.CursorShape.PointingHandCursor)
     
     def check_version_manual(self):
         """Manually check for version updates"""
@@ -1579,7 +1650,7 @@ class MainWindow(QMainWindow):
             )
     
     def update_version_label(self):
-        """Update version label with GitHub version"""
+        """Update version label with GitHub version and status colors"""
         if not hasattr(self, 'version_label'):
             return
         
@@ -1588,45 +1659,93 @@ class MainWindow(QMainWindow):
         
         if self.latest_github_version:
             if self.latest_github_version == "error":
+                # Version check failed - GRAY
                 self.version_label.setText(f"v{self.script_version} (Lokal)")
                 self.version_label.setStyleSheet("color: #666;")
                 self.version_label.setToolTip(t("gui_version_check_failed", "Version check failed"))
+                self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
+                self.version_label.mousePressEvent = self._on_version_label_clicked
+                # Hide update badge
+                if hasattr(self, 'update_badge'):
+                    self.update_badge.setVisible(False)
             else:
-                # Compare versions (simple string comparison for now)
+                # Use VersionChecker for proper version comparison
                 try:
-                    local_parts = [int(x) for x in self.script_version.split('.')]
-                    github_parts = [int(x) for x in self.latest_github_version.split('.')]
-                    
-                    if github_parts > local_parts:
-                        # Update available - RED
-                        self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub) ⬇")
-                        self.version_label.setStyleSheet("color: #dc3545; font-weight: bold;")
-                        self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
-                        self.version_label.setToolTip(t("gui_version_click_to_update", "Click to update"))
-                        self.version_label.mousePressEvent = self._on_version_label_clicked_update
-                    elif github_parts == local_parts:
-                        # Up to date - GREEN
-                        self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
-                        self.version_label.setStyleSheet("color: #28a745;")
-                        self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
-                        self.version_label.setToolTip(t("gui_version_up_to_date", "Version is up to date"))
-                        self.version_label.mousePressEvent = self._on_version_label_clicked
-                    else:
-                        # Local is newer (shouldn't happen) - GREEN
-                        self.version_label.setText(f"v{self.script_version} (Lokal) → v{self.latest_github_version} (GitHub)")
-                        self.version_label.setStyleSheet("color: #28a745;")
-                        self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
-                        self.version_label.setToolTip(t("gui_version_up_to_date", "Version is up to date"))
-                        self.version_label.mousePressEvent = self._on_version_label_clicked
-                except Exception as e:
-                    self.version_label.setText(f"v{self.script_version} (Lokal)")
-                    self.version_label.setStyleSheet("color: #666;")
-                    self.version_label.setToolTip(f"Error: {e}")
+                    from .version_checker import VersionChecker
+                except ImportError:
+                    try:
+                        from version_checker import VersionChecker
+                    except ImportError:
+                        VersionChecker = None
+                
+                if VersionChecker and self.version_checker:
+                    comparison = self.version_checker.compare_versions(
+                        self.script_version, 
+                        self.latest_github_version
+                    )
+                else:
+                    # Fallback: manual comparison
+                    try:
+                        local_parts = [int(x) for x in self.script_version.split('.')]
+                        github_parts = [int(x) for x in self.latest_github_version.split('.')]
+                        if github_parts > local_parts:
+                            comparison = -1
+                        elif github_parts == local_parts:
+                            comparison = 0
+                        else:
+                            comparison = 1
+                    except Exception:
+                        comparison = 0
+                
+                if comparison < 0:
+                    # Update available - RED
+                    self.version_label.setText(f"v{self.script_version} → v{self.latest_github_version} ⬇")
+                    self.version_label.setStyleSheet("color: #dc3545; font-weight: bold;")
+                    self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
+                    tooltip_text = t("gui_version_click_to_update", "Click to update")
+                    tooltip_text += f"\n{t('gui_local_version', 'Local')}: v{self.script_version}"
+                    tooltip_text += f"\n{t('gui_github_version', 'GitHub')}: v{self.latest_github_version}"
+                    self.version_label.setToolTip(tooltip_text)
+                    self.version_label.mousePressEvent = self._on_version_label_clicked_update
+                    # Show update badge
+                    if hasattr(self, 'update_badge'):
+                        self.update_badge.setVisible(True)
+                elif comparison == 0:
+                    # Up to date - GREEN
+                    self.version_label.setText(f"v{self.script_version} ✓")
+                    self.version_label.setStyleSheet("color: #28a745;")
+                    self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
+                    tooltip_text = t("gui_version_up_to_date", "Version is up to date")
+                    tooltip_text += f"\n{t('gui_local_version', 'Local')}: v{self.script_version}"
+                    tooltip_text += f"\n{t('gui_github_version', 'GitHub')}: v{self.latest_github_version}"
+                    self.version_label.setToolTip(tooltip_text)
+                    self.version_label.mousePressEvent = self._on_version_label_clicked
+                    # Hide update badge
+                    if hasattr(self, 'update_badge'):
+                        self.update_badge.setVisible(False)
+                else:
+                    # Local is newer (development version) - GREEN
+                    self.version_label.setText(f"v{self.script_version} (Dev)")
+                    self.version_label.setStyleSheet("color: #28a745;")
+                    self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
+                    tooltip_text = t("gui_version_dev", "Development version (local is newer)")
+                    tooltip_text += f"\n{t('gui_local_version', 'Local')}: v{self.script_version}"
+                    tooltip_text += f"\n{t('gui_github_version', 'GitHub')}: v{self.latest_github_version}"
+                    self.version_label.setToolTip(tooltip_text)
+                    self.version_label.mousePressEvent = self._on_version_label_clicked
+                    # Hide update badge
+                    if hasattr(self, 'update_badge'):
+                        self.update_badge.setVisible(False)
         else:
+            # No version check yet - GRAY
             self.version_label.setText(f"v{self.script_version} (Lokal)")
             self.version_label.setStyleSheet("color: #666;")
             self.version_label.setToolTip(t("gui_version_check_tooltip", "Click to check for updates"))
+            self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
             self.version_label.mousePressEvent = self._on_version_label_clicked
+            # Hide update badge
+            if hasattr(self, 'update_badge'):
+                self.update_badge.setVisible(False)
     
     def download_update(self):
         """Open download page for update"""
@@ -1639,20 +1758,45 @@ class MainWindow(QMainWindow):
         event.accept()
     
     def _on_version_label_clicked_update(self, event):
-        """Handle version label click when update is available - perform automatic update"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            # Ask user for confirmation
-            reply = QMessageBox.question(
-                self,
-                t("gui_update_available", "Update Available"),
-                t("gui_update_confirm", "Update to version {version} is available.\n\nDo you want to update now?").format(version=self.latest_github_version),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes
-            )
+        """Handle version label click when update is available - open update dialog"""
+        if event and event.button() == Qt.MouseButton.LeftButton:
+            # Open update dialog (will be created in next step)
+            try:
+                from .update_dialog import UpdateDialog
+            except ImportError:
+                try:
+                    from update_dialog import UpdateDialog
+                except ImportError:
+                    # Fallback: use old method if dialog doesn't exist yet
+                    reply = QMessageBox.question(
+                        self,
+                        t("gui_update_available", "Update Available"),
+                        t("gui_update_confirm", "Update to version {version} is available.\n\nDo you want to update now?").format(version=self.latest_github_version),
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.Yes
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.Yes:
+                        self.perform_automatic_update()
+                    event.accept()
+                    return
             
-            if reply == QMessageBox.StandardButton.Yes:
-                self.perform_automatic_update()
+            # Open update dialog
+            dialog = UpdateDialog(
+                self.script_dir,
+                self.script_version,
+                self.latest_github_version,
+                self.version_checker,
+                parent=self
+            )
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                # Update was performed, refresh version check
+                self.check_version_async()
         event.accept()
+    
+    def check_tool_version(self):
+        """Check tool version (alias for check_version_async)"""
+        self.check_version_async()
     
     def perform_automatic_update(self):
         """Perform automatic update via git pull or ZIP download"""
@@ -2157,9 +2301,14 @@ class MainWindow(QMainWindow):
                 progress.close()
                 return
             
-            # Download ZIP from GitHub
+            # Download ZIP from GitHub (version-specific if available)
             github_repo = self.config.get("GITHUB_REPO", "benjarogit/sc-cachyos-multi-updater")
-            zip_url = f"https://github.com/{github_repo}/archive/refs/heads/main.zip"
+            if self.latest_github_version and self.version_checker:
+                # Use version-specific ZIP URL
+                zip_url = self.version_checker.get_release_zip_url(self.latest_github_version)
+            else:
+                # Fallback to main branch
+                zip_url = f"https://github.com/{github_repo}/archive/refs/heads/main.zip"
             
             # Create temp directory (initialize to None for cleanup tracking)
             temp_dir = None

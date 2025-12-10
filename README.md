@@ -31,19 +31,19 @@ A simple one-click update tool for CachyOS that automatically updates system pac
 ### Start Commands
 
 **Console version (with menu):**
-```bash
+   ```bash
 ./cachyos-update
-```
+   ```
 
 **GUI version:**
-```bash
+   ```bash
 ./cachyos-update-gui
 ```
 
 ### Basic Configuration
 
 Create `cachyos-multi-updater/config.conf` from the example:
-```bash
+   ```bash
 cp cachyos-multi-updater/config.conf.example cachyos-multi-updater/config.conf
 ```
 
@@ -115,7 +115,7 @@ This script does all of that automatically, saving you time and ensuring everyth
 ### Step 1: Download
 
 **Option A: Using Git (recommended)**
-```bash
+   ```bash
 git clone https://github.com/benjarogit/sc-cachyos-multi-updater.git
 cd sc-cachyos-multi-updater
 ```
@@ -129,7 +129,7 @@ cd sc-cachyos-multi-updater
 
 The easiest way to get started:
 
-```bash
+   ```bash
 ./cachyos-update
 ```
 
@@ -162,7 +162,7 @@ See [Configuration](#-configuration) section below for details.
 ### Console Version
 
 **Start with menu:**
-```bash
+   ```bash
 ./cachyos-update
 ```
 
@@ -262,7 +262,7 @@ The GUI provides a modern, user-friendly interface for managing system updates w
 - Or install all dependencies: `pip3 install -r cachyos-multi-updater/requirements-gui.txt`
 
 **GUI Installation:**
-```bash
+   ```bash
 # Install PyQt6
 pip3 install PyQt6
 
@@ -355,7 +355,7 @@ DOWNLOAD_RETRIES=3
 #### Script says "Update läuft bereits!" (Update already running)
 
 **Solution:** Delete the lock file:
-```bash
+   ```bash
 rm cachyos-multi-updater/.update-all.lock
 ```
 
@@ -364,7 +364,7 @@ rm cachyos-multi-updater/.update-all.lock
 #### "Permission denied" when running script
 
 **Solution:** Make it executable:
-```bash
+   ```bash
 chmod +x cachyos-update
 chmod +x cachyos-update-gui
 chmod +x cachyos-multi-updater/update-all.sh
@@ -373,7 +373,7 @@ chmod +x cachyos-multi-updater/update-all.sh
 #### "Command not found" for yay/paru
 
 **Solution:** Install an AUR helper or disable AUR updates:
-```bash
+   ```bash
 # Install yay
 git clone https://aur.archlinux.org/yay.git
 cd yay
@@ -415,7 +415,7 @@ ENABLE_AUR_UPDATE=false
 4. Script directory correct? Check that `cachyos-multi-updater/update-all.sh` exists
 
 **Solution:**
-```bash
+   ```bash
 # Install PyQt6
 pip3 install PyQt6
 
@@ -438,7 +438,7 @@ pip3 install -r cachyos-multi-updater/requirements-gui.txt
 3. Try entering password manually each time (disable password saving)
 
 **Solution:**
-```bash
+   ```bash
 # Install password storage dependencies
 pip3 install keyring cryptography
 ```
@@ -459,7 +459,7 @@ pip3 install keyring cryptography
 Logs are stored in `cachyos-multi-updater/logs/` with names like `update-20241215-143022.log`.
 
 **View logs:**
-```bash
+   ```bash
 # List all logs
 ls -lh cachyos-multi-updater/logs/
 
@@ -473,7 +473,7 @@ grep -i error cachyos-multi-updater/logs/update-*.log
 ### Statistics
 
 View update statistics:
-```bash
+   ```bash
 ./cachyos-multi-updater/update-all.sh --stats
 ```
 
@@ -488,15 +488,15 @@ Shows:
 
 The setup script can create a desktop shortcut. Or create manually:
 
-```bash
+   ```bash
 cd cachyos-multi-updater
 ./create-desktop-shortcut.sh
-```
+   ```
 
 ### Update the Script
 
 If you cloned with Git:
-```bash
+   ```bash
 cd cachyos-multi-updater
 git pull
 ```

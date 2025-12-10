@@ -7,9 +7,25 @@ Checks local version against GitHub releases
 import re
 import json
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict
 from urllib.request import urlopen, Request
 from urllib.error import URLError, HTTPError
+
+# Handle imports for both direct execution and module import
+try:
+    from .debug_logger import get_logger
+except ImportError:
+    try:
+        from debug_logger import get_logger
+    except ImportError:
+        def get_logger():
+            class DummyLogger:
+                def debug(self, *args, **kwargs): pass
+                def info(self, *args, **kwargs): pass
+                def warning(self, *args, **kwargs): pass
+                def error(self, *args, **kwargs): pass
+                def exception(self, *args, **kwargs): pass
+            return DummyLogger()
 
 
 class VersionChecker:
@@ -18,11 +34,27 @@ class VersionChecker:
     def __init__(self, script_dir: str, github_repo: str = "benjarogit/sc-cachyos-multi-updater"):
         self.script_dir = Path(script_dir)
         self.github_repo = github_repo
+        self.logger = get_logger()
+        self.logger.debug(f"VersionChecker initialized for {github_repo}")
         self.local_version = self.get_local_version()
         self.latest_version = None
     
     def get_local_version(self) -> str:
-        """Get local script version from update-all.sh"""
+        """Get local script version from VERSION file (root), fallback to update-all.sh"""
+        # First try: Read from VERSION file (root directory)
+        root_dir = self.script_dir.parent
+        version_file = root_dir / "VERSION"
+        
+        if version_file.exists():
+            try:
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    version = f.read().strip()
+                    if version and re.match(r'^[0-9]+\.[0-9]+\.[0-9]+$', version):
+                        return version
+            except (OSError, IOError, ValueError):
+                pass
+        
+        # Fallback: Read from update-all.sh
         script_path = self.script_dir / "update-all.sh"
         try:
             with open(script_path, 'r', encoding='utf-8') as f:
@@ -32,14 +64,11 @@ class VersionChecker:
                         match = re.search(r'["\']([0-9.]+)["\']', line)
                         if match:
                             return match.group(1)
-        except (OSError, IOError) as e:
-            # Failed to read script file - return unknown
+        except (OSError, IOError):
             pass
-        except (ValueError, IndexError, AttributeError) as e:
-            # Failed to parse version - return unknown
+        except (ValueError, IndexError, AttributeError):
             pass
-        except Exception as e:
-            # Unexpected error - return unknown
+        except Exception:
             pass
         return "unknown"
     
@@ -168,4 +197,49 @@ class VersionChecker:
         if self.latest_version:
             return f"https://github.com/{github_repo}/releases/latest"
         return f"https://github.com/{github_repo}"
+    
+    def get_release_zip_url(self, version: str) -> str:
+        """Get ZIP download URL for specific version
+        
+        Args:
+            version: Version string (e.g., "1.0.17")
+            
+        Returns:
+            URL to download ZIP archive for the version
+        """
+        github_repo = self.get_github_repo_url()
+        # Remove 'v' prefix if present
+        version_clean = version.lstrip('v')
+        # GitHub archive URL for tag
+        return f"https://github.com/{github_repo}/archive/refs/tags/v{version_clean}.zip"
+    
+    def get_release_assets(self, version: Optional[str] = None) -> List[Dict]:
+        """Get release assets for a specific version or latest release
+        
+        Args:
+            version: Version string (e.g., "1.0.17"). If None, uses latest release.
+            
+        Returns:
+            List of asset dictionaries with 'name', 'browser_download_url', 'size', etc.
+        """
+        github_repo = self.get_github_repo_url()
+        
+        # Determine API URL
+        if version:
+            version_clean = version.lstrip('v')
+            api_url = f"https://api.github.com/repos/{github_repo}/releases/tags/v{version_clean}"
+        else:
+            api_url = f"https://api.github.com/repos/{github_repo}/releases/latest"
+        
+        try:
+            request = Request(api_url)
+            request.add_header('Accept', 'application/vnd.github.v3+json')
+            request.add_header('User-Agent', 'CachyOS-Multi-Updater-GUI')
+            
+            with urlopen(request, timeout=5) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                assets = data.get('assets', [])
+                return assets
+        except (URLError, HTTPError, json.JSONDecodeError, ValueError):
+            return []
 

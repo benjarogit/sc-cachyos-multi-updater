@@ -158,9 +158,9 @@ exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
                 pass  # No connections to disconnect
             
             # Reconnect signals
-            self.process.readyReadStandardOutput.connect(self._on_stdout)
-            self.process.readyReadStandardError.connect(self._on_stderr)
-            self.process.finished.connect(self._on_finished)
+        self.process.readyReadStandardOutput.connect(self._on_stdout)
+        self.process.readyReadStandardError.connect(self._on_stderr)
+        self.process.finished.connect(self._on_finished)
         
         # Verify script exists before starting
         if not self.script_path.exists():

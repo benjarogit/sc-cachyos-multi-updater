@@ -8,6 +8,22 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QPalette
 from PyQt6.QtCore import Qt
 
+# Handle imports for both direct execution and module import
+try:
+    from .debug_logger import get_logger
+except ImportError:
+    try:
+        from debug_logger import get_logger
+    except ImportError:
+        def get_logger():
+            class DummyLogger:
+                def debug(self, *args, **kwargs): pass
+                def info(self, *args, **kwargs): pass
+                def warning(self, *args, **kwargs): pass
+                def error(self, *args, **kwargs): pass
+                def exception(self, *args, **kwargs): pass
+            return DummyLogger()
+
 
 class ThemeManager:
     """Manages application themes"""
@@ -400,13 +416,17 @@ class ThemeManager:
         Args:
             theme_mode: "auto", "dark", or "light"
         """
+        logger = get_logger()
+        logger.debug(f"ThemeManager.apply_theme called with mode: {theme_mode}")
         app = QApplication.instance()
         if app is None:
+            logger.warning("QApplication instance not found, cannot apply theme")
             return
         
         if theme_mode == "auto":
             # Detect system theme
             system_theme = ThemeManager.detect_system_theme()
+            logger.debug(f"Auto theme detected: {system_theme}")
             stylesheet = ThemeManager.DARK_STYLESHEET if system_theme == "dark" else ThemeManager.LIGHT_STYLESHEET
         elif theme_mode == "dark":
             stylesheet = ThemeManager.DARK_STYLESHEET
@@ -414,4 +434,5 @@ class ThemeManager:
             stylesheet = ThemeManager.LIGHT_STYLESHEET
         
         app.setStyleSheet(stylesheet)
+        logger.info(f"Theme applied: {theme_mode}")
 
