@@ -14,9 +14,21 @@ from PyQt6.QtGui import QFont
 try:
     from .i18n import t
     from .fa_icons import get_fa_icon, apply_fa_font
+    from .debug_logger import get_logger
 except ImportError:
     from i18n import t
     from fa_icons import get_fa_icon, apply_fa_font
+    try:
+        from debug_logger import get_logger
+    except ImportError:
+        def get_logger():
+            class DummyLogger:
+                def debug(self, *args, **kwargs): pass
+                def info(self, *args, **kwargs): pass
+                def warning(self, *args, **kwargs): pass
+                def error(self, *args, **kwargs): pass
+                def exception(self, *args, **kwargs): pass
+            return DummyLogger()
 
 
 class UpdateConfirmationDialog(QDialog):
@@ -89,4 +101,9 @@ class UpdateConfirmationDialog(QDialog):
         if self.parent():
             self.parent().close()
         self.reject()
+    
+    def accept(self):
+        """User clicked Yes - accept dialog and start updates"""
+        # Call parent accept() to set result to Accepted
+        super().accept()
 

@@ -61,14 +61,22 @@ class MainWindow(QMainWindow):
         
         # Set script directory for debug logger (so logs go to logs/gui/)
         # Initialize logger immediately to ensure GUI logs are always created
+        # Initialize logger
         try:
             from .debug_logger import DebugLogger, get_logger
             DebugLogger.set_script_dir(str(self.script_dir))
             # Force logger initialization by getting it
-            logger = get_logger()
-            logger.info("GUI started")
+            self.logger = get_logger()
+            self.logger.info("GUI started")
         except Exception:
-            pass  # Logger not critical
+            # Create dummy logger if real one fails
+            class DummyLogger:
+                def debug(self, *args, **kwargs): pass
+                def info(self, *args, **kwargs): pass
+                def warning(self, *args, **kwargs): pass
+                def error(self, *args, **kwargs): pass
+                def exception(self, *args, **kwargs): pass
+            self.logger = DummyLogger()
         
         self.config_manager = ConfigManager(str(self.script_dir))
         self.config = self.config_manager.load_config()
@@ -430,6 +438,11 @@ class MainWindow(QMainWindow):
         self.btn_start = QPushButton(icon, text) if icon else QPushButton(text)
         if not icon:
             apply_fa_font(self.btn_start)
+        # Connect start button - disconnect first to avoid duplicate connections
+        try:
+            self.btn_start.clicked.disconnect()
+        except TypeError:
+            pass  # No existing connections
         self.btn_start.clicked.connect(self.start_updates)
         button_layout.addWidget(self.btn_start)
         
@@ -519,16 +532,6 @@ class MainWindow(QMainWindow):
         self.config["ENABLE_FLATPAK_UPDATE"] = str(self.check_flatpak.isChecked()).lower()
         self.config_manager.save_config(self.config)
     
-    def show_update_confirmation_dialog(self):
-        """Show update confirmation dialog after check"""
-        dialog = UpdateConfirmationDialog(self)
-        # Animate dialog appearance
-        if animate_dialog_show is not None:
-            animate_dialog_show(dialog)
-        if dialog.exec():
-            # User clicked "Yes" - start updates
-            self.start_updates(dry_run=False)
-        # If user clicked "No" or "Close", dialog just closes, nothing happens
     
     def get_sudo_password(self):
         """Get sudo password from secure storage or prompt user"""
@@ -711,53 +714,6 @@ class MainWindow(QMainWindow):
         else:
             self.status_label.setText(f"{percent}%")
     
-    def on_update_finished(self, exit_code: int):
-        """Handle update finished"""
-        # Stop spinner
-        self.spinner_timer.stop()
-        self.wait_label.setVisible(False)
-        self.btn_stop.setVisible(False)
-        self.is_updating = False
-        
-        self.btn_start.setEnabled(True)
-        self.btn_check.setEnabled(True)
-        self.btn_stop.setEnabled(False)
-        
-        if exit_code == 0:
-            self.status_label.setText(t("gui_update_complete", "Update complete"))
-            self.progress_bar.setValue(100)
-            # Show success toast
-            try:
-                from .toast_notification import show_toast
-                show_toast(self, t("gui_update_completed", "Update completed successfully"), 3000)
-            except ImportError:
-                try:
-                    from toast_notification import show_toast
-                    show_toast(self, t("gui_update_completed", "Update completed successfully"), 3000)
-                except ImportError:
-                    pass
-            
-            # If this was a dry-run (check), ask if user wants to update now
-            if hasattr(self, '_last_was_dry_run') and self._last_was_dry_run:
-                # Show dialog immediately after check finishes
-                # Use QTimer to ensure GUI is responsive and dialog appears quickly
-                from PyQt6.QtCore import QTimer
-                QTimer.singleShot(100, lambda: self.show_update_confirmation_dialog())
-        else:
-            self.status_label.setText(t("gui_update_failed", "Update failed"))
-            # Show error toast
-            try:
-                from .toast_notification import show_toast
-                show_toast(self, t("gui_update_failed", "Update failed"), 4000)
-            except ImportError:
-                try:
-                    from toast_notification import show_toast
-                    show_toast(self, t("gui_update_failed", "Update failed"), 4000)
-                except ImportError:
-                    pass
-        
-        self.update_runner = None
-        self._last_was_dry_run = False
     
     def on_error(self, error_msg: str):
         """Handle error"""
@@ -1434,8 +1390,21 @@ class MainWindow(QMainWindow):
                 t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(e))
             )
     
-    def start_updates(self):
-        """Start the update process"""
+    def _on_start_button_clicked(self):
+        """Handle start button click - wrapper to add logging"""
+        self.logger.info("=" * 80)
+        self.logger.info("_on_start_button_clicked: Start button was clicked!")
+        self.logger.info("=" * 80)
+        self.start_updates(skip_confirmation=False)
+    
+    def start_updates(self, skip_confirmation=False):
+        """Start the update process
+        
+        Args:
+            skip_confirmation: If True, skip the confirmation dialog (used when called after dry-run)
+        """
+        self.logger.info("=" * 80)
+        self.logger.info(f"start_updates CALLED: skip_confirmation={skip_confirmation}, is_updating={self.is_updating}")
         if self.is_updating:
             QMessageBox.warning(
                 self,
@@ -1454,26 +1423,40 @@ class MainWindow(QMainWindow):
             )
             return
         
-        # Show confirmation dialog
-        try:
+        # Show confirmation dialog if not called after dry-run (skip_confirmation=False)
+        if not skip_confirmation:
             try:
-                from .update_confirmation_dialog import UpdateConfirmationDialog
-            except ImportError:
-                from update_confirmation_dialog import UpdateConfirmationDialog
-            dialog = UpdateConfirmationDialog(self)
-            if dialog.exec() != QDialog.DialogCode.Accepted:
-                return
-        except ImportError:
-            # Fallback if dialog not available
-            reply = QMessageBox.question(
-                self,
-                t("gui_start_updates", "Start Updates"),
-                t("gui_start_updates_now", "Updates are available. Do you want to start the update process now?"),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No
-            )
-            if reply != QMessageBox.StandardButton.Yes:
-                return
+                self.logger.debug("start_updates: Showing UpdateConfirmationDialog (skip_confirmation=False)")
+            except:
+                pass
+            try:
+                try:
+                    from .update_confirmation_dialog import UpdateConfirmationDialog
+                except ImportError:
+                    from update_confirmation_dialog import UpdateConfirmationDialog
+                dialog = UpdateConfirmationDialog(self)
+                result = dialog.exec()
+                try:
+                    self.logger.debug(f"start_updates: Dialog result={result}, Accepted={QDialog.DialogCode.Accepted}")
+                except:
+                    pass
+                if result != QDialog.DialogCode.Accepted:
+                    try:
+                        self.logger.debug("start_updates: User rejected or closed dialog, returning")
+                    except:
+                        pass
+                    return
+            except Exception as e:
+                try:
+                    self.logger.error(f"start_updates: Error showing dialog: {e}")
+                except:
+                    pass
+                raise
+        else:
+            try:
+                self.logger.debug("start_updates: Skipping confirmation dialog (skip_confirmation=True)")
+            except:
+                pass
         
         # Ask for sudo password if needed
         try:
@@ -1598,6 +1581,19 @@ class MainWindow(QMainWindow):
     
     def on_update_finished(self, exit_code: int):
         """Handle update completion"""
+        self.logger.info("=" * 80)
+        self.logger.info(f"on_update_finished CALLED: exit_code={exit_code}")
+        self.logger.info(f"  _processing_finished={getattr(self, '_processing_finished', 'NOT SET')}")
+        self.logger.info(f"  _last_was_dry_run={getattr(self, '_last_was_dry_run', 'NOT SET')}")
+        self.logger.info(f"  is_updating={getattr(self, 'is_updating', 'NOT SET')}")
+        
+        # Prevent multiple calls - if already processing, return early
+        if hasattr(self, '_processing_finished') and self._processing_finished:
+            self.logger.warning("on_update_finished: Already processing, skipping duplicate call!")
+            return
+        self._processing_finished = True
+        self.logger.info("on_update_finished: Processing started")
+        
         # Reset UI state first (before showing dialog)
         self.is_updating = False
         self.btn_check.setEnabled(True)
@@ -1614,19 +1610,41 @@ class MainWindow(QMainWindow):
                 self.progress_bar.setValue(100)
                 if hasattr(self, 'status_label'):
                     self.status_label.setText("100%")
-                # Show success message dialog for dry-run with option to start update
-                reply = QMessageBox.question(
-                    self,
-                    t("gui_check_success", "Update Check Completed"),
-                    t("gui_check_completed", "Update check completed successfully!") + "\n\n" +
-                    t("gui_start_updates_now", "Updates are available. Do you want to start the update process now?"),
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                    QMessageBox.StandardButton.Yes
-                )
-                if reply == QMessageBox.StandardButton.Yes:
-                    # User wants to start update - call start_updates()
-                    # Note: UI state is already reset, so start_updates() can proceed
-                    self.start_updates()
+                # Show UpdateConfirmationDialog (the nicer dialog) for dry-run with option to start update
+                self.logger.info("on_update_finished: About to show UpdateConfirmationDialog")
+                try:
+                    try:
+                        from .update_confirmation_dialog import UpdateConfirmationDialog
+                    except ImportError:
+                        from update_confirmation_dialog import UpdateConfirmationDialog
+                    self.logger.info("on_update_finished: Creating UpdateConfirmationDialog instance")
+                    dialog = UpdateConfirmationDialog(self)
+                    self.logger.info("on_update_finished: UpdateConfirmationDialog created, calling exec()")
+                    # Use QApplication.processEvents() to ensure GUI is responsive before showing dialog
+                    QApplication.processEvents()
+                    result = dialog.exec()
+                    self.logger.info(f"on_update_finished: Dialog exec() returned: {result} (Accepted={QDialog.DialogCode.Accepted})")
+                    if result == QDialog.DialogCode.Accepted:
+                        # User wants to start update - call start_updates() with skip_confirmation=True
+                        # to avoid showing the dialog again
+                        # Note: UI state is already reset, so start_updates() can proceed
+                        self.logger.info("on_update_finished: User accepted, calling start_updates(skip_confirmation=True)")
+                        self.start_updates(skip_confirmation=True)
+                    else:
+                        self.logger.info("on_update_finished: User rejected or closed dialog")
+                except Exception as e:
+                    # Fallback to QMessageBox if UpdateConfirmationDialog fails
+                    self.logger.warning(f"Failed to show UpdateConfirmationDialog: {e}")
+                    reply = QMessageBox.question(
+                        self,
+                        t("gui_check_success", "Update Check Completed"),
+                        t("gui_check_completed", "Update check completed successfully!") + "\n\n" +
+                        t("gui_start_updates_now", "Updates are available. Do you want to start the update process now?"),
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.Yes
+                    )
+                    if reply == QMessageBox.StandardButton.Yes:
+                        self.start_updates(skip_confirmation=True)
             else:
                 # Real update completed
                 self.output_text.append("\n" + t("gui_update_completed", "Update completed successfully!"))
@@ -1648,6 +1666,11 @@ class MainWindow(QMainWindow):
                 t("gui_update_failed", "Update Failed"),
                 t("gui_update_failed", "Update failed with exit code: {code}").format(code=exit_code)
             )
+        
+        # Reset flag after processing is complete
+        self._processing_finished = False
+        self.logger.info("on_update_finished: Processing complete, flag reset")
+        self.logger.info("=" * 80)
     
     def update_version_label(self):
         """Update version label with GitHub version and status colors"""
