@@ -91,11 +91,15 @@ EXCLUDE_FILES=(
     "FINAL_AUDIT_REPORT.md"
     "GUI_RELEASE_CHECK.md"
     "RISK_ASSESSMENT_REPORT.md"
+    "PRODUKTIONSREIFE_AUDIT.md"
     "IMPROVEMENTS.md"
     "RELEASE_*.md"
     "config.conf"
     "*.log"
     "cachyos-multi-updater/config.conf"
+    "*.code-workspace"
+    "*.code-workspace.backup"
+    "VERSION"
 )
 
 for file in "${EXCLUDE_FILES[@]}"; do
@@ -328,9 +332,14 @@ See GitHub Releases for full changelog."
         fi
     fi
 else
-    echo -e "${YELLOW}⚠ GitHub CLI (gh) nicht gefunden${NC}"
+    echo -e "${RED}❌ GitHub CLI (gh) nicht gefunden${NC}"
+    echo -e "${RED}   Release kann nicht automatisch erstellt werden!${NC}"
     echo -e "${YELLOW}   Installiere mit: sudo pacman -S github-cli${NC}"
-    echo -e "${YELLOW}   Oder erstelle Release manuell auf GitHub${NC}"
+    echo -e "${YELLOW}   Oder erstelle Release manuell auf GitHub:${NC}"
+    echo -e "${CYAN}   https://github.com/${REPO}/releases/new${NC}"
+    echo -e "${YELLOW}   Tag: ${TAG_NAME}${NC}"
+    echo -e "${YELLOW}   Title: Version ${RELEASE_VERSION}${NC}"
+    exit 1
 fi
 
 echo -e "\n${GREEN}========================================${NC}"

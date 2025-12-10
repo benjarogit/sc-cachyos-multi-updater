@@ -452,7 +452,7 @@ class MainWindow(QMainWindow):
         copyright_layout = QHBoxLayout()
         copyright_layout.addStretch()
         # Use HTML entity for heart and style only the heart red
-        copyright_text = "© 2025 Sunny C. - <a href='https://benjaro.info'>benjaro.info</a> | I <span style='color: #d32f2f;'>❤️</span> <a href='https://www.woltlab.com/en/'>WoltLab Suite</a>"
+        copyright_text = "© 2025 Sunny C. - <a href='https://benjaro.info'>benjaro.info</a> | I <span style='color: #d32f2f;'>❤️</span> <a href='https://www.woltlab.com/en/'>WoltLab Suite</a> | <a href='https://github.com/benjarogit/photoshopCClinux'>photoshopCClinux</a>"
         copyright_label = QLabel(copyright_text)
         copyright_label.setOpenExternalLinks(True)
         copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)

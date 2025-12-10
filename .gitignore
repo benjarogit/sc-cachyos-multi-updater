@@ -74,6 +74,14 @@ CODE_QUALITY_REPORT.md
 FINAL_AUDIT_REPORT.md
 GUI_RELEASE_CHECK.md
 RISK_ASSESSMENT_REPORT.md
+PRODUKTIONSREIFE_AUDIT.md
 IMPROVEMENTS.md
 *.pyo
 __pycache__
+
+# Workspace files (IDE-specific)
+*.code-workspace
+*.code-workspace.backup
+
+# VERSION file (local only, not committed)
+VERSION
