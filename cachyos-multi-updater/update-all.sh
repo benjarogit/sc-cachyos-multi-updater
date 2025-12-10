@@ -28,7 +28,7 @@ readonly EXIT_UPDATE_ERROR=4
 # ========== Konfiguration ==========
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
-LOG_DIR="$SCRIPT_DIR/logs"
+LOG_DIR="$SCRIPT_DIR/logs/update"
 readonly LOG_DIR
 LOG_FILE="$LOG_DIR/update-$(date +%Y%m%d-%H%M%S).log"
 readonly LOG_FILE
@@ -65,8 +65,9 @@ readonly STATS_DIR="$SCRIPT_DIR/.stats"
 readonly STATS_FILE="$STATS_DIR/stats.json"
 mkdir -p "$STATS_DIR"
 
-# Log-Verzeichnis erstellen
+# Log-Verzeichnisse erstellen (update/ und gui/)
 mkdir -p "$LOG_DIR"
+mkdir -p "$SCRIPT_DIR/logs/gui"
 
 # ========== Config-Validierung ==========
 validate_config_value() {
@@ -154,7 +155,14 @@ log() {
     shift
     local message="$*"
     local timestamp
-    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    # Format: YYYY-MM-DD HH:MM:SS.mmm (mit Millisekunden wenn verfügbar)
+    if command -v date >/dev/null 2>&1 && date --version >/dev/null 2>&1; then
+        # GNU date (unterstützt %3N für Millisekunden)
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N' 2>/dev/null || date '+%Y-%m-%d %H:%M:%S')
+    else
+        # Fallback für andere date-Implementierungen
+        timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    fi
     echo "[$timestamp] [$level] $message" >> "$LOG_FILE"
 }
 

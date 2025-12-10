@@ -14,6 +14,7 @@ from PyQt6.QtCore import Qt, QStandardPaths
 from PyQt6.QtGui import QIcon, QPixmap, QFont
 import os
 import shlex
+import subprocess
 
 # Handle imports for both direct execution and module import
 try:
@@ -78,9 +79,9 @@ class ConfigDialog(QDialog):
         general_tab = self.create_general_tab()
         tabs.addTab(general_tab, t("gui_tab_general", "General"))
         
-        # Tab 3: Desktop Shortcut
+        # Tab 3: Shortcut
         desktop_tab = self.create_desktop_tab()
-        tabs.addTab(desktop_tab, t("gui_desktop_shortcut", "Desktop Shortcut"))
+        tabs.addTab(desktop_tab, t("gui_shortcut", "Shortcut"))
         
         # Tab 4: Logs
         logs_tab = self.create_logs_tab()
@@ -181,7 +182,7 @@ class ConfigDialog(QDialog):
         layout = QVBoxLayout()
         layout.setSpacing(16)
         
-        desktop_info = QLabel(t("gui_desktop_shortcut_info", "Create a desktop shortcut for easy access"))
+        desktop_info = QLabel(t("gui_shortcut_info", "Create a shortcut for easy access (Desktop, Application Menu, or Taskbar)"))
         desktop_info.setWordWrap(True)
         layout.addWidget(desktop_info)
         
@@ -358,7 +359,7 @@ class ConfigDialog(QDialog):
         layout.addWidget(options_container)
         
         # Create shortcut button
-        create_shortcut_btn = QPushButton(t("gui_create_shortcut", "Create Desktop Shortcut"))
+        create_shortcut_btn = QPushButton(t("gui_create_shortcut", "Create Shortcut"))
         create_shortcut_btn.clicked.connect(self.create_desktop_shortcut)
         layout.addWidget(create_shortcut_btn)
         
@@ -677,22 +678,39 @@ class ConfigDialog(QDialog):
         tool_group = QGroupBox(t("gui_info_tool", "Tool Information"))
         tool_layout = QVBoxLayout()
         
-        # Read script version
-        script_path = Path(self.script_dir) / "update-all.sh"
+        # Read script version from VERSION file (root), fallback to update-all.sh
+        import re
+        root_dir = Path(self.script_dir).parent
+        version_file = root_dir / "VERSION"
         local_version = "unknown"
-        if script_path.exists():
+        if version_file.exists():
             try:
-                with open(script_path, 'r', encoding='utf-8') as f:
-                    for line in f:
-                        if 'readonly SCRIPT_VERSION=' in line:
-                            local_version = line.split('"')[1] if '"' in line else line.split("'")[1]
-                            break
-            except (OSError, IOError) as e:
-                self.logger.debug(f"Failed to read script version from update-all.sh: {e}")
-            except (ValueError, IndexError) as e:
-                self.logger.debug(f"Failed to parse script version: {e}")
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    version = f.read().strip()
+                    # Validate version format (should be like "1.0.15")
+                    if re.match(r'^\d+\.\d+\.\d+$', version):
+                        local_version = version
             except Exception as e:
-                self.logger.warning(f"Unexpected error reading script version: {e}")
+                self.logger.debug(f"Failed to read version from VERSION file: {e}")
+        
+        # Fallback: Read from update-all.sh
+        if local_version == "unknown":
+            script_path = Path(self.script_dir) / "update-all.sh"
+            if script_path.exists():
+                try:
+                    with open(script_path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if 'readonly SCRIPT_VERSION=' in line:
+                                match = re.search(r'["\']([0-9.]+)["\']', line)
+                                if match:
+                                    local_version = match.group(1)
+                                    break
+                except (OSError, IOError) as e:
+                    self.logger.debug(f"Failed to read script version from update-all.sh: {e}")
+                except (ValueError, IndexError) as e:
+                    self.logger.debug(f"Failed to parse script version: {e}")
+                except Exception as e:
+                    self.logger.warning(f"Unexpected error reading script version: {e}")
         
         # Get GitHub version
         github_version = "checking..."
@@ -1286,7 +1304,8 @@ class ConfigDialog(QDialog):
                     break
             
             # Create directories if needed
-            app_dir.mkdir(parents=True, exist_ok=True)
+            if self.shortcut_app_menu.isChecked():
+                app_dir.mkdir(parents=True, exist_ok=True)
             
             # Create desktop entry content
             script_abs_path = script_path.absolute()
@@ -1352,35 +1371,44 @@ Type=Application
 Categories=System;
 """
             
-            desktop_file = app_dir / "update-all.desktop"
+            # Create desktop files based on selected locations
+            locations = []
             
-            # Write desktop file
-            with open(desktop_file, 'w', encoding='utf-8') as f:
-                f.write(desktop_entry)
+            # Application Menu (always create if checked)
+            if self.shortcut_app_menu.isChecked():
+                app_desktop_file = app_dir / "update-all.desktop"
+                with open(app_desktop_file, 'w', encoding='utf-8') as f:
+                    f.write(desktop_entry)
+                os.chmod(app_desktop_file, 0o755)
+                locations.append(str(app_desktop_file))
+                # Update desktop database to refresh application menu
+                try:
+                    subprocess.run(['update-desktop-database', str(app_dir)], 
+                                 check=False, capture_output=True, timeout=5)
+                except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+                    pass  # Non-critical - menu will refresh on next login
             
-            # Make executable
-            os.chmod(desktop_file, 0o755)
-            
-            # Copy to desktop if requested
+            # Desktop (create if checked)
             if self.shortcut_desktop.isChecked() and desktop_dir:
                 desktop_file_copy = desktop_dir / "update-all.desktop"
                 with open(desktop_file_copy, 'w', encoding='utf-8') as f:
                     f.write(desktop_entry)
                 os.chmod(desktop_file_copy, 0o755)
+                locations.append(str(desktop_file_copy))
             
-            # Success message
-            locations = []
-            if self.shortcut_app_menu.isChecked():
-                locations.append(str(app_dir / "update-all.desktop"))
-            if self.shortcut_desktop.isChecked() and desktop_dir:
-                locations.append(str(desktop_dir / "update-all.desktop"))
-            
-            QMessageBox.information(
-                self,
-                t("gui_success", "Success"),
-                t("gui_shortcut_created", "Desktop shortcut created successfully!") + "\n\n" +
-                "\n".join(locations)
-            )
+            if locations:
+                QMessageBox.information(
+                    self,
+                    t("gui_success", "Success"),
+                    t("gui_shortcut_created", "Shortcut created successfully!") + "\n\n" +
+                    "\n".join(locations)
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    t("gui_warning", "Warning"),
+                    t("gui_shortcut_no_location", "Please select at least one location (Application Menu or Desktop)!")
+                )
         except Exception as e:
             QMessageBox.critical(
                 self,

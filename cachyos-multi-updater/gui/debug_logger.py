@@ -17,11 +17,17 @@ class DebugLogger:
     
     _instance: Optional['DebugLogger'] = None
     _initialized = False
+    _script_dir: Optional[Path] = None
     
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
+    
+    @classmethod
+    def set_script_dir(cls, script_dir: str):
+        """Set the script directory for log file location"""
+        cls._script_dir = Path(script_dir)
     
     def __init__(self):
         if self._initialized:
@@ -34,22 +40,64 @@ class DebugLogger:
         if self.logger.handlers:
             return
         
-        # Create logs directory
-        self.log_dir = Path.home() / ".cache" / "cachyos-multi-updater" / "gui-logs"
-        self.log_dir.mkdir(parents=True, exist_ok=True)
+        # Create logs directory (ensure it exists before any logging)
+        # Use script_dir/logs/gui/ if script_dir is set, otherwise fallback to ~/.cache
+        if self._script_dir:
+            self.log_dir = self._script_dir / "logs" / "gui"
+        else:
+            self.log_dir = Path.home() / ".cache" / "cachyos-multi-updater" / "gui-logs"
+        try:
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            # If we can't create the log directory, log to stderr
+            # sys is already imported at the top of the file
+            print(f"WARNING: Cannot create log directory {self.log_dir}: {e}", file=sys.stderr)
+            # Use a fallback location in /tmp
+            self.log_dir = Path("/tmp") / "cachyos-multi-updater-gui-logs"
+            try:
+                self.log_dir.mkdir(parents=True, exist_ok=True)
+            except Exception as e2:
+                # Last resort: use current directory
+                print(f"WARNING: Cannot create fallback log directory {self.log_dir}: {e2}", file=sys.stderr)
+                self.log_dir = Path.cwd() / "gui-logs"
+                try:
+                    self.log_dir.mkdir(parents=True, exist_ok=True)
+                except Exception as e3:
+                    # Final fallback: use /tmp directly
+                    print(f"WARNING: Cannot create final fallback log directory {self.log_dir}: {e3}", file=sys.stderr)
+                    self.log_dir = Path("/tmp")
         
         # Log file with timestamp
-        log_file = self.log_dir / f"gui-debug-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
-        
-        # File handler
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setLevel(logging.DEBUG)
-        file_formatter = logging.Formatter(
-            '%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        file_handler.setFormatter(file_formatter)
-        self.logger.addHandler(file_handler)
+        try:
+            log_file = self.log_dir / f"gui-debug-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+            
+            # File handler
+            file_handler = logging.FileHandler(log_file, encoding='utf-8')
+            file_handler.setLevel(logging.DEBUG)
+            file_formatter = logging.Formatter(
+                '%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+            file_handler.setFormatter(file_formatter)
+            self.logger.addHandler(file_handler)
+        except Exception as e:
+            # If we can't create the log file, log to stderr and continue
+            print(f"WARNING: Cannot create log file in {self.log_dir}: {e}", file=sys.stderr)
+            # Create a fallback log file in /tmp
+            log_file = Path("/tmp") / f"cachyos-multi-updater-gui-debug-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+            try:
+                file_handler = logging.FileHandler(log_file, encoding='utf-8')
+                file_handler.setLevel(logging.DEBUG)
+                file_formatter = logging.Formatter(
+                    '%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S'
+                )
+                file_handler.setFormatter(file_formatter)
+                self.logger.addHandler(file_handler)
+            except Exception as e2:
+                # Last resort: only console logging
+                print(f"ERROR: Cannot create any log file: {e2}", file=sys.stderr)
+                log_file = None
         
         # Console handler (only for errors and warnings)
         console_handler = logging.StreamHandler(sys.stderr)
@@ -60,10 +108,17 @@ class DebugLogger:
         
         self._initialized = True
         self.log_file = log_file
-        self.logger.info("=" * 80)
-        self.logger.info("GUI Debug Logger initialized")
-        self.logger.info(f"Log file: {log_file}")
-        self.logger.info("=" * 80)
+        if log_file:
+            try:
+                self.logger.info("=" * 80)
+                self.logger.info("GUI Debug Logger initialized")
+                self.logger.info(f"Log file: {log_file}")
+                self.logger.info("=" * 80)
+            except Exception:
+                # If logging fails, at least print to stderr
+                print(f"GUI Debug Logger initialized (log file: {log_file})", file=sys.stderr)
+        else:
+            print("GUI Debug Logger initialized (no log file available)", file=sys.stderr)
     
     def debug(self, message: str, exc_info=False):
         """Log debug message"""

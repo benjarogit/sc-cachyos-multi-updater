@@ -20,16 +20,26 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
-# Read version from update-all.sh (in cachyos-multi-updater/)
+# Read version from VERSION file (root), fallback to update-all.sh
+VERSION_FILE="${SCRIPT_DIR}/VERSION"
 UPDATE_SCRIPT="${SCRIPT_DIR}/cachyos-multi-updater/update-all.sh"
-if [ ! -f "${UPDATE_SCRIPT}" ]; then
-    echo -e "${RED}❌ Fehler: update-all.sh nicht gefunden in ${SCRIPT_DIR}${NC}"
-    exit 1
+
+VERSION=""
+if [ -f "${VERSION_FILE}" ]; then
+    VERSION=$(cat "${VERSION_FILE}" | tr -d '\n\r' | xargs)
+    # Validate version format (should be like "1.0.15")
+    if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+        VERSION=""
+    fi
 fi
 
-VERSION=$(grep -oP 'readonly SCRIPT_VERSION="\K[^"]+' "${UPDATE_SCRIPT}" || echo "")
+# Fallback: Read from update-all.sh
+if [ -z "$VERSION" ] && [ -f "${UPDATE_SCRIPT}" ]; then
+    VERSION=$(grep -oP 'readonly SCRIPT_VERSION="\K[^"]+' "${UPDATE_SCRIPT}" || echo "")
+fi
+
 if [ -z "$VERSION" ]; then
-    echo -e "${RED}❌ Fehler: Version nicht in update-all.sh gefunden${NC}"
+    echo -e "${RED}❌ Fehler: Version nicht gefunden (weder in VERSION noch in update-all.sh)${NC}"
     exit 1
 fi
 

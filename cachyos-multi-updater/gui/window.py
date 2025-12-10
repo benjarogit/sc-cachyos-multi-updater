@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
     QGraphicsOpacityEffect
 )
 from PyQt6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QThread, pyqtSignal, QAbstractAnimation
-from PyQt6.QtGui import QTextCharFormat, QColor, QFont, QMovie, QPixmap, QPainter
+from PyQt6.QtGui import QTextCharFormat, QColor, QFont, QMovie, QPixmap, QPainter, QTextCursor
 
 # Import Font Awesome icon helper
 try:
@@ -57,9 +57,26 @@ class MainWindow(QMainWindow):
     def __init__(self, script_dir: str):
         super().__init__()
         self.script_dir = Path(script_dir)
+        
+        # Set script directory for debug logger (so logs go to logs/gui/)
+        # Initialize logger immediately to ensure GUI logs are always created
+        try:
+            from .debug_logger import DebugLogger, get_logger
+            DebugLogger.set_script_dir(str(self.script_dir))
+            # Force logger initialization by getting it
+            logger = get_logger()
+            logger.info("GUI started")
+        except Exception:
+            pass  # Logger not critical
+        
         self.config_manager = ConfigManager(str(self.script_dir))
         self.config = self.config_manager.load_config()
         self.update_runner = None
+        self._last_was_dry_run = False  # Track if last operation was dry-run
+        
+        # Migrate VERSION file from script dir to root if needed
+        self._migrate_version_file()
+        
         self.script_version = self.get_script_version()
         self.is_updating = False
         self.spinner_timer = QTimer()
@@ -84,18 +101,107 @@ class MainWindow(QMainWindow):
         # Check for updates in background
         self.check_version_async()
     
+    def _migrate_version_file(self):
+        """Migrate VERSION file from script directory to root directory"""
+        try:
+            root_dir = self.script_dir.parent
+            old_version_file = self.script_dir / "VERSION"
+            new_version_file = root_dir / "VERSION"
+            
+            # If VERSION exists in script dir, move it to root
+            if old_version_file.exists() and not new_version_file.exists():
+                import shutil
+                shutil.move(str(old_version_file), str(new_version_file))
+                # Set permissions: 644
+                new_version_file.chmod(0o644)
+            
+            # If VERSION doesn't exist in root, create it from update-all.sh
+            if not new_version_file.exists():
+                script_path = self.script_dir / "update-all.sh"
+                if script_path.exists():
+                    try:
+                        import re
+                        with open(script_path, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                if 'readonly SCRIPT_VERSION=' in line:
+                                    match = re.search(r'["\']([0-9.]+)["\']', line)
+                                    if match:
+                                        version = match.group(1)
+                                        # Validate version format
+                                        if re.match(r'^\d+\.\d+\.\d+$', version):
+                                            with open(new_version_file, 'w', encoding='utf-8') as vf:
+                                                vf.write(version + '\n')
+                                            new_version_file.chmod(0o644)
+                                            break
+                    except Exception:
+                        pass
+        except Exception:
+            # Migration failed, but don't crash - fallback to reading from update-all.sh
+            pass
+    
     def get_script_version(self):
-        """Read script version from update-all.sh"""
+        """Read script version from VERSION file (root), fallback to update-all.sh"""
+        import re
+        # First try: Read from VERSION file (root directory)
+        root_dir = self.script_dir.parent
+        version_file = root_dir / "VERSION"
+        if version_file.exists():
+            try:
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    version = f.read().strip()
+                    # Validate version format (should be like "1.0.15")
+                    if re.match(r'^\d+\.\d+\.\d+$', version):
+                        return version
+            except Exception:
+                pass
+        
+        # Fallback: Read from update-all.sh
         script_path = self.script_dir / "update-all.sh"
         try:
             with open(script_path, 'r', encoding='utf-8') as f:
                 for line in f:
                     if 'readonly SCRIPT_VERSION=' in line:
-                        version = line.split('"')[1] if '"' in line else line.split("'")[1]
-                        return version
+                        match = re.search(r'["\']([0-9.]+)["\']', line)
+                        if match:
+                            version = match.group(1)
+                            # Validate version format
+                            if re.match(r'^\d+\.\d+\.\d+$', version):
+                                return version
         except Exception:
             pass
         return "unknown"
+    
+    def _update_version_file_with_retry(self, version_file, version):
+        """Update VERSION file with retry logic (3 attempts with exponential backoff)"""
+        import time
+        delays = [0.1, 0.2, 0.4]  # Exponential backoff: 100ms, 200ms, 400ms
+        
+        for attempt, delay in enumerate(delays, 1):
+            try:
+                with open(version_file, 'w', encoding='utf-8') as f:
+                    f.write(version + '\n')
+                # Set permissions: 644
+                version_file.chmod(0o644)
+                return True
+            except Exception as e:
+                if attempt < len(delays):
+                    # Wait before retry
+                    time.sleep(delay)
+                else:
+                    # All attempts failed - log warning but don't fail update
+                    try:
+                        from .debug_logger import get_logger
+                        logger = get_logger()
+                        logger.warning(f"Failed to update VERSION file after {attempt} attempts: {e}")
+                    except:
+                        pass
+                    QMessageBox.warning(
+                        self,
+                        t("gui_update_success", "Update Successful"),
+                        t("gui_update_success_msg", "Script updated successfully!\n\nWarning: Failed to update VERSION file after multiple attempts. Please restart the application manually.")
+                    )
+                    return False
+        return False
     
     def update_spinner(self):
         """Update spinner animation"""
@@ -345,12 +451,15 @@ class MainWindow(QMainWindow):
         # Copyright footer
         copyright_layout = QHBoxLayout()
         copyright_layout.addStretch()
-        copyright_label = QLabel("© 2025 Sunny C. - <a href='https://benjaro.info'>benjaro.info</a>")
+        # Use HTML entity for heart and style only the heart red
+        copyright_text = "© 2025 Sunny C. - <a href='https://benjaro.info'>benjaro.info</a> | I <span style='color: #d32f2f;'>❤️</span> <a href='https://www.woltlab.com/en/'>WoltLab Suite</a>"
+        copyright_label = QLabel(copyright_text)
         copyright_label.setOpenExternalLinks(True)
         copyright_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         copyright_font = QFont()
         copyright_font.setPointSize(8)
         copyright_label.setFont(copyright_font)
+        # Don't set link color to red - only the heart should be red
         copyright_layout.addWidget(copyright_label)
         copyright_layout.addStretch()
         layout.addLayout(copyright_layout)
@@ -643,42 +752,54 @@ class MainWindow(QMainWindow):
             ThemeManager.apply_theme(theme_mode)
     
     def view_logs(self):
-        """View log files"""
-        log_dir = Path(self.script_dir) / "logs"
-        if not log_dir.exists():
+        """View log files with separate dropdowns for update and GUI logs"""
+        logs_base_dir = Path(self.script_dir) / "logs"
+        update_log_dir = logs_base_dir / "update"
+        gui_log_dir = logs_base_dir / "gui"
+        
+        # Check if log directories exist
+        if not logs_base_dir.exists():
             QMessageBox.information(self, t("gui_no_logs", "No Logs"), t("gui_log_directory_not_found", "Log directory does not exist."))
             return
         
-        # Get latest log file
-        log_files = sorted(log_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if not log_files:
+        # Get update log files
+        update_log_files = []
+        if update_log_dir.exists():
+            update_log_files = sorted(update_log_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        
+        # Get GUI log files
+        gui_log_files = []
+        if gui_log_dir.exists():
+            gui_log_files = sorted(gui_log_dir.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        
+        # Check if any logs exist
+        if not update_log_files and not gui_log_files:
             QMessageBox.information(self, t("gui_no_logs", "No Logs"), t("gui_no_logs", "No log files found."))
             return
         
         # Show log viewer dialog
         dialog = QDialog(self)
         dialog.setWindowTitle(t("gui_log_viewer", "Log Viewer"))
-        dialog.setMinimumWidth(800)
-        dialog.setMinimumHeight(600)
+        dialog.setMinimumWidth(900)
+        dialog.setMinimumHeight(700)
         
         layout = QVBoxLayout()
         
+        # Log type selector (Update Logs / GUI Logs)
+        type_layout = QHBoxLayout()
+        type_label = QLabel(t("gui_log_type", "Log Type:"))
+        type_combo = QComboBox()
+        type_combo.addItem(t("gui_update_logs", "Update Logs"), "update")
+        type_combo.addItem(t("gui_gui_logs", "GUI Logs"), "gui")
+        type_layout.addWidget(type_label)
+        type_layout.addWidget(type_combo)
+        type_layout.addStretch()
+        layout.addLayout(type_layout)
+        
         # File selector
         file_layout = QHBoxLayout()
-        file_label = QLabel("Log File:")
+        file_label = QLabel(t("gui_log_file", "Log File:"))
         file_combo = QComboBox()
-        file_combo.addItems([f.name for f in log_files])
-        
-        def load_log(index):
-            log_path = log_files[index]
-            log_text.clear()
-            try:
-                with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    log_text.setPlainText(f.read())
-            except Exception as e:
-                log_text.setPlainText(f"Error reading log: {e}")
-        
-        file_combo.currentIndexChanged.connect(load_log)
         file_layout.addWidget(file_label)
         file_layout.addWidget(file_combo)
         file_layout.addStretch()
@@ -690,8 +811,85 @@ class MainWindow(QMainWindow):
         log_text.setFont(QFont("Monospace", 9))
         layout.addWidget(log_text)
         
-        # Load first log
-        load_log(0)
+        def update_file_combo(log_type):
+            """Update file combo box based on selected log type"""
+            file_combo.clear()
+            if log_type == "update":
+                files = update_log_files
+            else:
+                files = gui_log_files
+            
+            if files:
+                file_combo.addItems([f.name for f in files])
+                load_log(0)
+            else:
+                log_text.setPlainText(t("gui_no_logs_found", "No log files found for this type."))
+        
+        def load_log(index):
+            """Load selected log file"""
+            log_type = type_combo.currentData()
+            if log_type == "update":
+                files = update_log_files
+            else:
+                files = gui_log_files
+            
+            if not files or index < 0 or index >= len(files):
+                log_text.setPlainText(t("gui_no_logs_found", "No log files found for this type."))
+                return
+            
+            log_path = files[index]
+            log_text.clear()
+            try:
+                with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    log_text.setPlainText(f.read())
+                # Auto-scroll to bottom
+                cursor = log_text.textCursor()
+                cursor.movePosition(QTextCursor.MoveOperation.End)
+                log_text.setTextCursor(cursor)
+            except Exception as e:
+                log_text.setPlainText(f"Error reading log: {e}")
+        
+        # Connect signals
+        type_combo.currentIndexChanged.connect(lambda: update_file_combo(type_combo.currentData()))
+        file_combo.currentIndexChanged.connect(load_log)
+        
+        # Initialize with update logs
+        update_file_combo("update")
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        
+        # Open log directory button
+        icon, text = get_fa_icon('folder-open', t("gui_open_log_directory", "Open Log Directory"))
+        open_dir_btn = QPushButton(icon, text) if icon else QPushButton(text)
+        if not icon:
+            apply_fa_font(open_dir_btn)
+        def open_log_directory():
+            import subprocess
+            import os
+            # Try different methods to open directory, suppressing Qt warnings
+            try:
+                # Method 1: Use subprocess with environment that suppresses Qt warnings
+                env = os.environ.copy()
+                env['QT_LOGGING_RULES'] = 'qt.qpa.services.debug=false'
+                # Use Popen with detached process to avoid Qt portal warnings
+                subprocess.Popen(
+                    ['xdg-open', str(logs_base_dir)],
+                    env=env,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True
+                )
+            except Exception:
+                # Fallback: Show directory path in message box
+                QMessageBox.information(
+                    self,
+                    t("gui_info", "Info"),
+                    t("gui_log_directory", "Log Directory:") + f"\n{logs_base_dir}"
+                )
+        open_dir_btn.clicked.connect(open_log_directory)
+        button_layout.addWidget(open_dir_btn)
         
         # Close button
         icon, text = get_fa_icon('times', t("gui_close", "Close"))
@@ -699,7 +897,9 @@ class MainWindow(QMainWindow):
         if not icon:
             apply_fa_font(close_btn)
         close_btn.clicked.connect(dialog.accept)
-        layout.addWidget(close_btn)
+        button_layout.addWidget(close_btn)
+        
+        layout.addLayout(button_layout)
         
         dialog.setLayout(layout)
         dialog.exec()
@@ -1077,6 +1277,306 @@ class MainWindow(QMainWindow):
         self.version_label.setText(f"v{self.script_version} (Lokal) - {t('gui_checking', 'Checking...')}")
         self.version_label.setStyleSheet("color: #666;")
         self.check_version_async()
+    
+    def check_updates(self):
+        """Check for available updates (dry-run mode)"""
+        # Initialize debug logger to ensure it's available
+        try:
+            from .debug_logger import get_logger
+            logger = get_logger()
+            logger.info("=" * 80)
+            logger.info("Starting update check (dry-run)")
+            logger.info(f"Script directory: {self.script_dir}")
+            logger.info(f"Log file: {logger.get_log_file()}")
+            logger.info("=" * 80)
+        except Exception:
+            pass  # Logger not critical
+        
+        if self.is_updating:
+            QMessageBox.warning(
+                self,
+                t("gui_update_failed", "Update Failed"),
+                t("gui_update_already_running", "Another update is already in progress.\n\nPlease wait for it to complete.")
+            )
+            return
+        
+        # Check if update-all.sh exists
+        script_path = self.script_dir / "update-all.sh"
+        if not script_path.exists():
+            QMessageBox.critical(
+                self,
+                t("gui_error", "Error"),
+                t("gui_script_not_found", "update-all.sh not found in:\n{script_dir}").format(script_dir=self.script_dir)
+            )
+            return
+        
+        # Start update runner in dry-run mode
+        try:
+            # Import UpdateRunner with fallback for relative/absolute imports
+            try:
+                from .update_runner import UpdateRunner
+            except ImportError:
+                from update_runner import UpdateRunner
+            
+            from PyQt6.QtCore import QProcess
+            
+            # Create or reuse UpdateRunner
+            if self.update_runner is None:
+                # Create UpdateRunner as child of MainWindow to ensure proper Qt lifecycle
+                self.update_runner = UpdateRunner(str(self.script_dir), self.config, parent=self)
+                self.update_runner.output_received.connect(self.on_output_received)
+                self.update_runner.progress_update.connect(self.on_progress_update)
+                self.update_runner.error_occurred.connect(self.on_error_occurred)
+                self.update_runner.finished.connect(self.on_update_finished)
+            else:
+                # Reuse existing runner - stop process if running
+                if hasattr(self.update_runner, 'process') and self.update_runner.process:
+                    if self.update_runner.process.state() != QProcess.ProcessState.NotRunning:
+                        self.update_runner.process.kill()
+                        self.update_runner.process.waitForFinished(1000)
+            
+            # Clear output and reset progress bar
+            self.output_text.clear()
+            self.output_text.append(t("gui_checking_updates", "Checking for updates..."))
+            self.progress_bar.setValue(0)
+            self.progress_bar.setVisible(True)
+            if hasattr(self, 'status_label'):
+                self.status_label.setText("0%")
+                self.status_label.setVisible(True)
+            
+            # Start in dry-run mode (no sudo password needed for dry-run)
+            self._last_was_dry_run = True  # Mark as dry-run
+            self.update_runner.start_update(dry_run=True, interactive=False, sudo_password=None)
+            
+            # Update UI
+            self.is_updating = True
+            self.btn_check.setEnabled(False)
+            self.btn_start.setEnabled(False)
+            if hasattr(self, 'btn_stop'):
+                self.btn_stop.setEnabled(True)
+                self.btn_stop.setVisible(True)
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                t("gui_error", "Error"),
+                t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(e))
+            )
+    
+    def start_updates(self):
+        """Start the update process"""
+        if self.is_updating:
+            QMessageBox.warning(
+                self,
+                t("gui_update_failed", "Update Failed"),
+                t("gui_update_already_running", "Another update is already in progress.\n\nPlease wait for it to complete.")
+            )
+            return
+        
+        # Check if update-all.sh exists
+        script_path = self.script_dir / "update-all.sh"
+        if not script_path.exists():
+            QMessageBox.critical(
+                self,
+                t("gui_error", "Error"),
+                t("gui_script_not_found", "update-all.sh not found in:\n{script_dir}").format(script_dir=self.script_dir)
+            )
+            return
+        
+        # Show confirmation dialog
+        try:
+            try:
+                from .update_confirmation_dialog import UpdateConfirmationDialog
+            except ImportError:
+                from update_confirmation_dialog import UpdateConfirmationDialog
+            dialog = UpdateConfirmationDialog(self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                return
+        except ImportError:
+            # Fallback if dialog not available
+            reply = QMessageBox.question(
+                self,
+                t("gui_start_updates", "Start Updates"),
+                t("gui_start_updates_now", "Updates are available. Do you want to start the update process now?"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        
+        # Ask for sudo password if needed
+        try:
+            from .sudo_dialog import SudoDialog
+        except ImportError:
+            from sudo_dialog import SudoDialog
+        
+        sudo_dialog = SudoDialog(self)
+        if sudo_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        
+        sudo_password = sudo_dialog.get_password()
+        if not sudo_password:
+            return
+        
+        # Start update runner
+        try:
+            # Import UpdateRunner with fallback for relative/absolute imports
+            try:
+                from .update_runner import UpdateRunner
+            except ImportError:
+                from update_runner import UpdateRunner
+            
+            from PyQt6.QtCore import QProcess
+            
+            # Create or reuse UpdateRunner
+            if self.update_runner is None:
+                # Create UpdateRunner as child of MainWindow to ensure proper Qt lifecycle
+                self.update_runner = UpdateRunner(str(self.script_dir), self.config, parent=self)
+                self.update_runner.output_received.connect(self.on_output_received)
+                self.update_runner.progress_update.connect(self.on_progress_update)
+                self.update_runner.error_occurred.connect(self.on_error_occurred)
+                self.update_runner.finished.connect(self.on_update_finished)
+            else:
+                # Reuse existing runner - stop process if running
+                if hasattr(self.update_runner, 'process') and self.update_runner.process:
+                    if self.update_runner.process.state() != QProcess.ProcessState.NotRunning:
+                        self.update_runner.process.kill()
+                        self.update_runner.process.waitForFinished(1000)
+            
+            # Clear output and reset progress bar
+            self.output_text.clear()
+            self.output_text.append(t("gui_starting_updates", "Starting updates..."))
+            self.progress_bar.setValue(0)
+            self.progress_bar.setVisible(True)
+            if hasattr(self, 'status_label'):
+                self.status_label.setText("0%")
+                self.status_label.setVisible(True)
+            
+            # Start update
+            self._last_was_dry_run = False  # Mark as real update
+            self.update_runner.start_update(dry_run=False, interactive=False, sudo_password=sudo_password)
+            
+            # Update UI
+            self.is_updating = True
+            self.btn_check.setEnabled(False)
+            self.btn_start.setEnabled(False)
+            if hasattr(self, 'btn_stop'):
+                self.btn_stop.setEnabled(True)
+                self.btn_stop.setVisible(True)
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                t("gui_error", "Error"),
+                t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(e))
+            )
+    
+    def stop_updates(self):
+        """Stop the running update process"""
+        if self.update_runner and self.update_runner.process:
+            self.update_runner.process.kill()
+            self.update_runner.process.waitForFinished(1000)
+            self.output_text.append("\n" + t("gui_update_stopped", "Update stopped by user."))
+        
+        # Reset UI
+        self.is_updating = False
+        self.btn_check.setEnabled(True)
+        self.btn_start.setEnabled(True)
+        if hasattr(self, 'btn_stop'):
+            self.btn_stop.setEnabled(False)
+            self.btn_stop.setVisible(False)
+    
+    def on_output_received(self, text: str):
+        """Handle output from update runner"""
+        # Filter out console-specific prompts that are confusing in GUI
+        # These are only relevant for console version
+        filtered_patterns = [
+            "Drücke Enter",
+            "Press Enter",
+            "Enter um das Fenster",
+            "Enter to close",
+            "zum Beenden",
+            "to close",
+            "read -r -p",
+        ]
+        
+        # Check if line contains any of the filtered patterns
+        should_filter = any(pattern.lower() in text.lower() for pattern in filtered_patterns)
+        
+        if not should_filter:
+            self.output_text.append(text)
+            # Auto-scroll to bottom
+            cursor = self.output_text.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            self.output_text.setTextCursor(cursor)
+    
+    def on_error_occurred(self, error_msg: str):
+        """Handle error from update runner"""
+        QMessageBox.critical(
+            self,
+            t("gui_error", "Error"),
+            t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=error_msg)
+        )
+        # Reset UI
+        self.is_updating = False
+        self.btn_check.setEnabled(True)
+        self.btn_start.setEnabled(True)
+        if hasattr(self, 'btn_stop'):
+            self.btn_stop.setEnabled(False)
+            self.btn_stop.setVisible(False)
+    
+    def on_update_finished(self, exit_code: int):
+        """Handle update completion"""
+        # Reset UI state first (before showing dialog)
+        self.is_updating = False
+        self.btn_check.setEnabled(True)
+        self.btn_start.setEnabled(True)
+        if hasattr(self, 'btn_stop'):
+            self.btn_stop.setEnabled(False)
+            self.btn_stop.setVisible(False)
+        
+        if exit_code == 0:
+            if self._last_was_dry_run:
+                # Dry-run completed - show different message
+                self.output_text.append("\n" + t("gui_check_completed", "Update check completed successfully!"))
+                # Set progress to 100% on success
+                self.progress_bar.setValue(100)
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText("100%")
+                # Show success message dialog for dry-run with option to start update
+                reply = QMessageBox.question(
+                    self,
+                    t("gui_check_success", "Update Check Completed"),
+                    t("gui_check_completed", "Update check completed successfully!") + "\n\n" +
+                    t("gui_start_updates_now", "Updates are available. Do you want to start the update process now?"),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                if reply == QMessageBox.StandardButton.Yes:
+                    # User wants to start update - call start_updates()
+                    # Note: UI state is already reset, so start_updates() can proceed
+                    self.start_updates()
+            else:
+                # Real update completed
+                self.output_text.append("\n" + t("gui_update_completed", "Update completed successfully!"))
+                # Set progress to 100% on success
+                self.progress_bar.setValue(100)
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText("100%")
+                # Show success message dialog
+                QMessageBox.information(
+                    self,
+                    t("gui_update_success", "Update Successful"),
+                    t("gui_update_completed", "Update completed successfully!")
+                )
+        else:
+            self.output_text.append("\n" + t("gui_update_failed", "Update failed with exit code: {code}").format(code=exit_code))
+            # Show error message dialog
+            QMessageBox.critical(
+                self,
+                t("gui_update_failed", "Update Failed"),
+                t("gui_update_failed", "Update failed with exit code: {code}").format(code=exit_code)
+            )
     
     def update_version_label(self):
         """Update version label with GitHub version"""
@@ -1520,6 +2020,15 @@ class MainWindow(QMainWindow):
             output_text = "\n".join(output_lines) if output_lines else t("gui_no_output", "No output")
             
             if result.returncode == 0:
+                
+                # Update script_version and version label if update was successful
+                if was_updated:
+                    github_version = self.latest_github_version
+                    if github_version:
+                        # Update script_version
+                        self.script_version = github_version
+                        # Update version label
+                        self.update_version_label()
                 
                 success_msg = t("gui_update_success_msg", "Script updated successfully!\n\nPlease restart the application to use the new version.")
                 if output_text and output_text != t("gui_no_output", "No output"):
@@ -2026,6 +2535,33 @@ class MainWindow(QMainWindow):
                 progress.close()
                 progress_closed = True
                 shutil.rmtree(temp_dir)
+                
+                # Update VERSION file after successful ZIP update
+                github_version = self.latest_github_version
+                if github_version:
+                    root_version_file = self.script_dir.parent / "VERSION"
+                    
+                    # Check if VERSION file already has the correct version (skip if so)
+                    if root_version_file.exists():
+                        try:
+                            with open(root_version_file, 'r', encoding='utf-8') as f:
+                                existing_version = f.read().strip()
+                                if existing_version == github_version:
+                                    # Already correct, skip writing
+                                    pass
+                                else:
+                                    # Need to update
+                                    self._update_version_file_with_retry(root_version_file, github_version)
+                        except Exception:
+                            # Failed to read, try to update anyway
+                            self._update_version_file_with_retry(root_version_file, github_version)
+                    else:
+                        # File doesn't exist, create it
+                        self._update_version_file_with_retry(root_version_file, github_version)
+                    
+                    # Update script_version and version label
+                    self.script_version = github_version
+                    self.update_version_label()
                 
                 # Success
                 QMessageBox.information(
