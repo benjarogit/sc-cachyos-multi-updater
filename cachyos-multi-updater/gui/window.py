@@ -42,13 +42,23 @@ try:
     from .i18n import t
     from .sudo_dialog import SudoDialog
     from .update_confirmation_dialog import UpdateConfirmationDialog
+    from .widgets import ClickableLabel, FlatButton
 except ImportError:
     from config_dialog import ConfigDialog
     from update_runner import UpdateRunner
     from config_manager import ConfigManager
     from i18n import t
     from sudo_dialog import SudoDialog
-    from update_confirmation_dialog import UpdateConfirmationDialog
+    try:
+        from update_confirmation_dialog import UpdateConfirmationDialog
+    except ImportError:
+        UpdateConfirmationDialog = None
+    try:
+        from widgets import ClickableLabel, FlatButton
+    except ImportError:
+        # Fallback: Use QLabel and QPushButton if custom widgets not available
+        ClickableLabel = QLabel
+        FlatButton = QPushButton
 
 
 
@@ -68,6 +78,8 @@ class MainWindow(QMainWindow):
             # Force logger initialization by getting it
             self.logger = get_logger()
             self.logger.info("GUI started")
+            # Best Practice: Cleanup old update logs on startup
+            self._cleanup_update_logs()
         except Exception:
             # Create dummy logger if real one fails
             class DummyLogger:
@@ -76,6 +88,7 @@ class MainWindow(QMainWindow):
                 def warning(self, *args, **kwargs): pass
                 def error(self, *args, **kwargs): pass
                 def exception(self, *args, **kwargs): pass
+                def get_log_file(self): return None
             self.logger = DummyLogger()
         
         self.config_manager = ConfigManager(str(self.script_dir))
@@ -224,7 +237,7 @@ class MainWindow(QMainWindow):
         self.wait_label.setText(f"{spinner_chars[self.spinner_frame]} {wait_text}")
     
     def init_ui(self):
-        """Initialize UI"""
+        """Initialize UI - Best Practice: Modular structure"""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
@@ -233,7 +246,41 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
         central_widget.setLayout(layout)
         
-        # Header with GitHub icon and version
+        # Modular UI creation
+        layout.addLayout(self._create_header())
+        layout.addLayout(self._create_components_info_section())
+        layout.addLayout(self._create_progress_output_section())
+        layout.addLayout(self._create_button_bar())
+        layout.addLayout(self._create_footer())
+        
+        # Initialize update info data structure
+        self.update_info_data = {
+            "planned": {
+                "system": False,
+                "aur": False,
+                "cursor": False,
+                "adguard": False,
+                "flatpak": False
+            },
+            "status": {
+                "system": {"found": 0, "current": False},
+                "aur": {"found": 0, "current": False},
+                "cursor": {"version": "", "update_available": False},
+                "adguard": {"version": "", "update_available": False},
+                "flatpak": {"found": 0, "current": False}
+            },
+            "summary": {
+                "total_packages": 0,
+                "components_updated": []
+            }
+        }
+    
+    def _create_header(self) -> QHBoxLayout:
+        """Create header layout with title, version, and icons
+        
+        Returns:
+            QHBoxLayout: Header layout
+        """
         header_layout = QHBoxLayout()
         header_layout.setSpacing(8)
         
@@ -256,20 +303,19 @@ class MainWindow(QMainWindow):
         """)
         header_layout.addWidget(self.header_label)
         
-        # Version label (will be updated after version check)
-        self.version_label = QLabel(f"v{self.script_version} (Lokal)")
+        # Version label (will be updated after version check) - Best Practice: Use ClickableLabel
+        self.version_label = ClickableLabel(f"v{self.script_version} (Lokal)")
         version_font = QFont()
         version_font.setPointSize(10)
         version_font.setItalic(True)
         self.version_label.setFont(version_font)
         self.version_label.setStyleSheet("color: #666;")
-        self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self.version_label.setToolTip(t("gui_version_check_tooltip", "Click to check for updates"))
-        self.version_label.mousePressEvent = self._on_version_label_clicked
+        self.version_label.clicked.connect(self._on_version_label_clicked)
         header_layout.addWidget(self.version_label)
         
-        # Update badge (shown when update is available)
-        self.update_badge = QLabel()
+        # Update badge (shown when update is available) - Best Practice: Use ClickableLabel
+        self.update_badge = ClickableLabel("NEW")
         self.update_badge.setVisible(False)
         self.update_badge.setStyleSheet("""
             QLabel {
@@ -281,15 +327,14 @@ class MainWindow(QMainWindow):
                 font-weight: bold;
             }
         """)
-        self.update_badge.setText("NEW")
-        self.update_badge.setCursor(Qt.CursorShape.PointingHandCursor)
         self.update_badge.setToolTip(t("gui_update_available", "Update available"))
-        self.update_badge.mousePressEvent = self._on_version_label_clicked_update
+        self.update_badge.clicked.connect(self._on_version_label_clicked_update)
         header_layout.addWidget(self.update_badge)
         
         header_layout.addStretch()
         
         # Language switcher with icon and text (horizontal layout)
+        # Best Practice: Use QWidget with ClickableLabel wrapper
         language_widget = QWidget()
         language_layout = QHBoxLayout()
         language_layout.setContentsMargins(6, 4, 6, 4)
@@ -319,66 +364,63 @@ class MainWindow(QMainWindow):
         # Update language icon and text colors (must be called after both labels are created)
         self.update_language_icon()
         
-        # Make entire widget clickable
-        language_widget.setCursor(Qt.CursorShape.PointingHandCursor)
-        language_widget.mousePressEvent = self._on_language_label_clicked
-        language_widget.setToolTip(t("gui_switch_language", "Switch Language"))
-        header_layout.addWidget(language_widget)
+        # Best Practice: Use ClickableLabel wrapper for clickable widget
+        language_clickable = ClickableLabel()
+        language_clickable.setToolTip(t("gui_switch_language", "Switch Language"))
+        language_clickable.clicked.connect(self._on_language_label_clicked)
+        # Set widget as child of clickable label (workaround for layout)
+        language_clickable_layout = QHBoxLayout()
+        language_clickable_layout.setContentsMargins(0, 0, 0, 0)
+        language_clickable_layout.addWidget(language_widget)
+        language_clickable.setLayout(language_clickable_layout)
+        header_layout.addWidget(language_clickable)
         
-        # Theme switcher icon
-        self.theme_label = QLabel()
+        # Theme switcher icon - Best Practice: Use ClickableLabel
+        self.theme_label = ClickableLabel()
         self.update_theme_icon()
         self.theme_label.setToolTip(t("gui_switch_theme", "Switch Theme"))
-        self.theme_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.theme_label.mousePressEvent = self._on_theme_label_clicked
+        self.theme_label.clicked.connect(self._on_theme_label_clicked)
         header_layout.addWidget(self.theme_label)
         
-        # Changelog/Release icon as clickable label
-        self.changelog_label = QLabel()
+        # Changelog/Release icon - Best Practice: Use ClickableLabel
+        self.changelog_label = ClickableLabel()
         self.update_changelog_icon()
         self.changelog_label.setToolTip(t("gui_open_changelog", "Open Changelog/Releases"))
-        self.changelog_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.changelog_label.mousePressEvent = self._on_changelog_label_clicked
+        self.changelog_label.clicked.connect(self._on_changelog_label_clicked)
         header_layout.addWidget(self.changelog_label)
         
-        # GitHub icon as clickable label (not button)
-        self.github_label = QLabel()
+        # GitHub icon - Best Practice: Use ClickableLabel
+        self.github_label = ClickableLabel()
         self.update_github_icon()
         self.github_label.setToolTip(t("gui_open_github", "Open GitHub repository"))
-        self.github_label.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.github_label.mousePressEvent = self._on_github_label_clicked
+        self.github_label.clicked.connect(self._on_github_label_clicked)
         header_layout.addWidget(self.github_label)
         
-        layout.addLayout(header_layout)
+        return header_layout
+    
+    def _create_components_info_section(self) -> QHBoxLayout:
+        """Create components and update info section
         
-        # Update components group
+        Returns:
+            QHBoxLayout: Components and info layout
+        """
+        components_info_layout = QHBoxLayout()
+        components_info_layout.setSpacing(12)
+        
+        # Update Components Group
         self.components_group = QGroupBox(t("gui_update_components", "Update Components"))
         components_layout = QVBoxLayout()
         components_layout.setSpacing(6)
         
         # Try to use Font Awesome checkboxes, fallback to regular checkboxes
-        try:
-            from .fa_checkbox import FACheckBox
-            USE_FA_CHECKBOX = True
-        except ImportError:
-            try:
-                from fa_checkbox import FACheckBox
-                USE_FA_CHECKBOX = True
-            except ImportError:
-                USE_FA_CHECKBOX = False
+        # Best Practice: Use helper method
+        CheckBoxClass = self._get_fa_checkbox_class()
         
-        if USE_FA_CHECKBOX:
-            self.check_system = FACheckBox(t("system_updates", "System Updates (pacman)"))
-            self.check_aur = FACheckBox(t("aur_updates", "AUR Updates (yay/paru)"))
-            self.check_cursor = FACheckBox(t("cursor_editor_update", "Cursor Editor Update"))
-            self.check_adguard = FACheckBox(t("adguard_home_update", "AdGuard Home Update"))
-            self.check_flatpak = FACheckBox(t("flatpak_updates", "Flatpak Updates"))
-        else:
-            self.check_system = QCheckBox(t("system_updates", "System Updates (pacman)"))
-            self.check_aur = QCheckBox(t("aur_updates", "AUR Updates (yay/paru)"))
-            self.check_cursor = QCheckBox(t("cursor_editor_update", "Cursor Editor Update"))
-            self.check_adguard = QCheckBox(t("adguard_home_update", "AdGuard Home Update"))
-            self.check_flatpak = QCheckBox(t("flatpak_updates", "Flatpak Updates"))
+        self.check_system = CheckBoxClass(t("system_updates", "System Updates (pacman)"))
+        self.check_aur = CheckBoxClass(t("aur_updates", "AUR Updates (yay/paru)"))
+        self.check_cursor = CheckBoxClass(t("cursor_editor_update", "Cursor Editor Update"))
+        self.check_adguard = CheckBoxClass(t("adguard_home_update", "AdGuard Home Update"))
+        self.check_flatpak = CheckBoxClass(t("flatpak_updates", "Flatpak Updates"))
         
         components_layout.addWidget(self.check_system)
         components_layout.addWidget(self.check_aur)
@@ -387,7 +429,36 @@ class MainWindow(QMainWindow):
         components_layout.addWidget(self.check_flatpak)
         
         self.components_group.setLayout(components_layout)
-        layout.addWidget(self.components_group)
+        components_info_layout.addWidget(self.components_group)
+        
+        # Update Infos Panel
+        self.update_info_group = QGroupBox(t("gui_update_info", "Update Infos"))
+        update_info_layout = QVBoxLayout()
+        update_info_layout.setSpacing(6)
+        
+        self.update_info_text = QTextEdit()
+        self.update_info_text.setReadOnly(True)
+        self.update_info_text.setFont(QFont("Monospace", 9))
+        self.update_info_text.setMaximumHeight(200)
+        # Best Practice: Enable scrolling so users can read update info during updates
+        self.update_info_text.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.update_info_text.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.update_info_text.setPlaceholderText(t("gui_update_info_placeholder", "Update information will appear here during check/update..."))
+        update_info_layout.addWidget(self.update_info_text)
+        
+        self.update_info_group.setLayout(update_info_layout)
+        components_info_layout.addWidget(self.update_info_group, 1)  # Stretch factor 1
+        
+        return components_info_layout
+    
+    def _create_progress_output_section(self) -> QVBoxLayout:
+        """Create progress bar, status label, and output text area
+        
+        Returns:
+            QVBoxLayout: Progress and output layout
+        """
+        progress_output_layout = QVBoxLayout()
+        progress_output_layout.setSpacing(6)
         
         # Progress bar (without text format to avoid duplication)
         self.progress_bar = QProgressBar()
@@ -395,16 +466,16 @@ class MainWindow(QMainWindow):
         self.progress_bar.setMaximum(100)
         self.progress_bar.setValue(0)
         self.progress_bar.setFormat("")  # No text format - status_label shows the info
-        layout.addWidget(self.progress_bar)
+        progress_output_layout.addWidget(self.progress_bar)
         
         # Status label
         self.status_label = QLabel(t("gui_ready", "Ready"))
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.status_label)
+        progress_output_layout.addWidget(self.status_label)
         
         # Output area
         self.output_label = QLabel(t("gui_output", "Output:"))
-        layout.addWidget(self.output_label)
+        progress_output_layout.addWidget(self.output_label)
         
         self.output_text = QTextEdit()
         self.output_text.setReadOnly(True)
@@ -419,39 +490,29 @@ class MainWindow(QMainWindow):
                 self.highlighter = ConsoleSyntaxHighlighter(self.output_text.document())
             except ImportError:
                 self.highlighter = None
-        layout.addWidget(self.output_text, 1)  # Stretch factor 1: expand to fill available space
+        progress_output_layout.addWidget(self.output_text, 1)  # Stretch factor 1: expand to fill available space
         
-        # Buttons
+        return progress_output_layout
+        
+    def _create_button_bar(self) -> QHBoxLayout:
+        """Create button bar with action buttons
+        
+        Returns:
+            QHBoxLayout: Button bar layout
+        """
         button_layout = QHBoxLayout()
         button_layout.setSpacing(8)
         
-        # Check for Updates button
-        icon, text = get_fa_icon('search', t("gui_check_for_updates", "Check for Updates"))
-        self.btn_check = QPushButton(icon, text) if icon else QPushButton(text)
-        if not icon:
-            apply_fa_font(self.btn_check)
-        self.btn_check.clicked.connect(self.check_updates)
+        # Check for Updates button - Best Practice: Use helper method
+        self.btn_check = self._create_fa_button('search', t("gui_check_for_updates", "Check for Updates"), self.check_updates)
         button_layout.addWidget(self.btn_check)
         
-        # Start Updates button
-        icon, text = get_fa_icon('play', t("gui_start_updates", "Start Updates"))
-        self.btn_start = QPushButton(icon, text) if icon else QPushButton(text)
-        if not icon:
-            apply_fa_font(self.btn_start)
-        # Connect start button - disconnect first to avoid duplicate connections
-        try:
-            self.btn_start.clicked.disconnect()
-        except TypeError:
-            pass  # No existing connections
-        self.btn_start.clicked.connect(self.start_updates)
+        # Start Updates button - Best Practice: Use helper method
+        self.btn_start = self._create_fa_button('play', t("gui_start_updates", "Start Updates"), self.start_updates)
         button_layout.addWidget(self.btn_start)
         
-        # Stop button
-        icon, text = get_fa_icon('stop', t("gui_stop", "Stop"))
-        self.btn_stop = QPushButton(icon, text) if icon else QPushButton(text)
-        if not icon:
-            apply_fa_font(self.btn_stop)
-        self.btn_stop.clicked.connect(self.stop_updates)
+        # Stop button - Best Practice: Use helper method
+        self.btn_stop = self._create_fa_button('stop', t("gui_stop", "Stop"), self.stop_updates)
         self.btn_stop.setEnabled(False)
         self.btn_stop.setVisible(False)  # Hidden by default
         button_layout.addWidget(self.btn_stop)
@@ -469,27 +530,25 @@ class MainWindow(QMainWindow):
         
         button_layout.addStretch()
         
-        # Settings button
-        icon, text = get_fa_icon('cog', t("gui_settings", "Settings"))
-        self.btn_settings = QPushButton(icon, text) if icon else QPushButton(text)
-        if not icon:
-            apply_fa_font(self.btn_settings)
-        self.btn_settings.clicked.connect(self.show_settings)
+        # Settings button - Best Practice: Use helper method
+        self.btn_settings = self._create_fa_button('cog', t("gui_settings", "Settings"), self.show_settings)
         button_layout.addWidget(self.btn_settings)
         
-        # View Logs button
-        icon, text = get_fa_icon('file-text', t("gui_view_logs", "View Logs"))
-        self.btn_logs = QPushButton(icon, text) if icon else QPushButton(text)
-        if not icon:
-            apply_fa_font(self.btn_logs)
-        self.btn_logs.clicked.connect(self.view_logs)
+        # View Logs button - Best Practice: Use helper method
+        self.btn_logs = self._create_fa_button('file-text', t("gui_view_logs", "View Logs"), self.view_logs)
         button_layout.addWidget(self.btn_logs)
         
-        layout.addLayout(button_layout)
+        return button_layout
+    
+    def _create_footer(self) -> QHBoxLayout:
+        """Create footer with copyright information
         
-        # Copyright footer
+        Returns:
+            QHBoxLayout: Footer layout
+        """
         copyright_layout = QHBoxLayout()
         copyright_layout.addStretch()
+        
         # Use HTML entity for heart and style only the heart red
         copyright_text = "© 2025 Sunny C. - <a href='https://benjaro.info'>benjaro.info</a> | I <span style='color: #d32f2f;'>❤️</span> <a href='https://www.woltlab.com/en/'>WoltLab Suite</a> | <a href='https://github.com/benjarogit/photoshopCClinux'>photoshopCClinux</a>"
         copyright_label = QLabel(copyright_text)
@@ -501,7 +560,143 @@ class MainWindow(QMainWindow):
         # Don't set link color to red - only the heart should be red
         copyright_layout.addWidget(copyright_label)
         copyright_layout.addStretch()
-        layout.addLayout(copyright_layout)
+        
+        return copyright_layout
+    
+    # ============================================================================
+    # Helper Methods - Best Practice: Extract common patterns into reusable methods
+    # ============================================================================
+    
+    def _create_fa_button(self, icon_name: str, text: str, slot=None) -> QPushButton:
+        """Create a QPushButton with Font Awesome icon
+        
+        Best Practice: Helper method to reduce code duplication
+        
+        Args:
+            icon_name: Font Awesome icon name (e.g., 'search', 'play', 'cog')
+            text: Button text
+            slot: Optional slot function to connect to clicked signal
+            
+        Returns:
+            QPushButton: Configured button with icon
+        """
+        icon, button_text = get_fa_icon(icon_name, text)
+        btn = QPushButton(icon, button_text) if icon else QPushButton(button_text)
+        if not icon:
+            apply_fa_font(btn)
+        if slot:
+            btn.clicked.connect(slot)
+        return btn
+    
+    def _try_import(self, module_name: str, fallback_name: str = None):
+        """Try to import a module with fallback
+        
+        Best Practice: Helper method for common import pattern
+        
+        Args:
+            module_name: Module name to import (with or without dot prefix)
+            fallback_name: Optional fallback module name (defaults to module_name without dot)
+            
+        Returns:
+            Imported module or None if import fails
+        """
+        if fallback_name is None:
+            fallback_name = module_name.lstrip('.')
+        
+        try:
+            if module_name.startswith('.'):
+                from importlib import import_module
+                return import_module(module_name, package=__package__)
+            else:
+                return __import__(module_name)
+        except ImportError:
+            try:
+                return __import__(fallback_name)
+            except ImportError:
+                return None
+    
+    def _get_fa_checkbox_class(self):
+        """Get FACheckBox class if available, otherwise QCheckBox
+        
+        Best Practice: Helper method to reduce code duplication
+        
+        Returns:
+            Class: FACheckBox if available, QCheckBox otherwise
+        """
+        try:
+            from .fa_checkbox import FACheckBox
+            return FACheckBox
+        except ImportError:
+            try:
+                from fa_checkbox import FACheckBox
+                return FACheckBox
+            except ImportError:
+                return QCheckBox
+    
+    def _safe_disconnect_signal(self, signal, slot=None):
+        """Safely disconnect a signal from a slot
+        
+        Best Practice: Helper method to prevent TypeError when disconnecting
+        
+        Args:
+            signal: Qt signal object
+            slot: Optional slot to disconnect. If None, disconnects all slots.
+        """
+        try:
+            if slot is not None:
+                signal.disconnect(slot)
+            else:
+                signal.disconnect()
+        except TypeError:
+            # No connections to disconnect
+            pass
+    
+    def _safe_connect_signal(self, signal, slot, disconnect_first: bool = True):
+        """Safely connect a signal to a slot, optionally disconnecting first
+        
+        Best Practice: Helper method to prevent duplicate connections
+        
+        Args:
+            signal: Qt signal object
+            slot: Slot function to connect
+            disconnect_first: If True, disconnect existing connections first
+        """
+        if disconnect_first:
+            self._safe_disconnect_signal(signal)
+        signal.connect(slot)
+    
+    def _cleanup_update_logs(self, keep_last: int = 10):
+        """Clean up old update log files
+        
+        Best Practice: Helper method to prevent log directory from growing too large
+        
+        Args:
+            keep_last: Number of recent log files to keep (default: 10)
+        """
+        try:
+            update_log_dir = self.script_dir / "logs" / "update"
+            if not update_log_dir.exists():
+                return
+            
+            log_files = sorted(
+                update_log_dir.glob("update-*.log"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True
+            )
+            
+            if len(log_files) > keep_last:
+                deleted_count = 0
+                for old_log in log_files[keep_last:]:
+                    try:
+                        old_log.unlink()
+                        deleted_count += 1
+                    except Exception as e:
+                        self.logger.warning(f"Failed to delete old update log {old_log}: {e}")
+                
+                if deleted_count > 0:
+                    self.logger.info(f"Cleaned up {deleted_count} old update log files (kept {keep_last} most recent)")
+        except Exception as e:
+            self.logger.warning(f"Failed to cleanup update logs: {e}")
     
     def load_config(self):
         """Load config and update UI"""
@@ -614,8 +809,30 @@ class MainWindow(QMainWindow):
         self.update_runner.finished.connect(self.on_update_finished)
         self.update_runner.error_occurred.connect(self.on_error)
         
-        # Clear output
+        # Clear output and update info
         self.output_text.clear()
+        self.update_info_text.clear()
+        # Reset update info data
+        self.update_info_data = {
+            "planned": {
+                "system": False,
+                "aur": False,
+                "cursor": False,
+                "adguard": False,
+                "flatpak": False
+            },
+            "status": {
+                "system": {"found": 0, "current": False},
+                "aur": {"found": 0, "current": False},
+                "cursor": {"version": "", "update_available": False},
+                "adguard": {"version": "", "update_available": False},
+                "flatpak": {"found": 0, "current": False}
+            },
+            "summary": {
+                "total_packages": 0,
+                "components_updated": []
+            }
+        }
         
         # Show "Please wait" message immediately
         if dry_run:
@@ -659,16 +876,214 @@ class MainWindow(QMainWindow):
             self.is_updating = False
             self.on_update_finished(1)
     
+    def parse_update_output(self, text: str):
+        """Parse update output and extract structured information"""
+        # Reset planned components at start
+        if "VERFÜGBARE UPDATES WERDEN GEPRÜFT" in text or "CHECKING FOR AVAILABLE UPDATES" in text:
+            self.update_info_data["planned"] = {
+                "system": self.check_system.isChecked(),
+                "aur": self.check_aur.isChecked(),
+                "cursor": self.check_cursor.isChecked(),
+                "adguard": self.check_adguard.isChecked(),
+                "flatpak": self.check_flatpak.isChecked()
+            }
+        
+        # System updates
+        if re.search(r'📦.*System.*pacman', text, re.IGNORECASE):
+            match = re.search(r'✓\s+(\d+)\s+Pakete?\s+verfügbar', text, re.IGNORECASE)
+            if match:
+                self.update_info_data["status"]["system"]["found"] = int(match.group(1))
+                self.update_info_data["status"]["system"]["current"] = False
+            elif re.search(r'○.*aktuell', text, re.IGNORECASE):
+                self.update_info_data["status"]["system"]["current"] = True
+                self.update_info_data["status"]["system"]["found"] = 0
+        
+        # AUR updates
+        if re.search(r'🔧.*AUR', text, re.IGNORECASE):
+            match = re.search(r'✓\s+(\d+)\s+Pakete?\s+verfügbar', text, re.IGNORECASE)
+            if match:
+                self.update_info_data["status"]["aur"]["found"] = int(match.group(1))
+                self.update_info_data["status"]["aur"]["current"] = False
+            elif re.search(r'○.*aktuell', text, re.IGNORECASE):
+                self.update_info_data["status"]["aur"]["current"] = True
+                self.update_info_data["status"]["aur"]["found"] = 0
+        
+        # Cursor updates
+        if re.search(r'🖱️.*Cursor', text, re.IGNORECASE):
+            match = re.search(r'✓.*Update verfügbar:\s+v?([0-9.]+)\s+→\s+v?([0-9.]+)', text, re.IGNORECASE)
+            if match:
+                self.update_info_data["status"]["cursor"]["version"] = f"{match.group(1)} → {match.group(2)}"
+                self.update_info_data["status"]["cursor"]["update_available"] = True
+            elif re.search(r'○.*aktuell.*v?([0-9.]+)', text, re.IGNORECASE):
+                version_match = re.search(r'v?([0-9.]+)', text)
+                if version_match:
+                    self.update_info_data["status"]["cursor"]["version"] = version_match.group(1)
+                self.update_info_data["status"]["cursor"]["update_available"] = False
+        
+        # AdGuard updates
+        if re.search(r'🛡️.*AdGuard', text, re.IGNORECASE):
+            match = re.search(r'✓.*Update verfügbar:\s+v?([0-9.]+)\s+→\s+v?([0-9.]+)', text, re.IGNORECASE)
+            if match:
+                self.update_info_data["status"]["adguard"]["version"] = f"{match.group(1)} → {match.group(2)}"
+                self.update_info_data["status"]["adguard"]["update_available"] = True
+            elif re.search(r'○.*aktuell.*v?([0-9.]+)', text, re.IGNORECASE):
+                version_match = re.search(r'v?([0-9.]+)', text)
+                if version_match:
+                    self.update_info_data["status"]["adguard"]["version"] = version_match.group(1)
+                self.update_info_data["status"]["adguard"]["update_available"] = False
+        
+        # Flatpak updates
+        if re.search(r'📦.*Flatpak', text, re.IGNORECASE):
+            match = re.search(r'✓\s+(\d+)\s+Pakete?\s+verfügbar', text, re.IGNORECASE)
+            if match:
+                self.update_info_data["status"]["flatpak"]["found"] = int(match.group(1))
+                self.update_info_data["status"]["flatpak"]["current"] = False
+            elif re.search(r'○.*aktuell', text, re.IGNORECASE):
+                self.update_info_data["status"]["flatpak"]["current"] = True
+                self.update_info_data["status"]["flatpak"]["found"] = 0
+        
+        # Summary
+        match = re.search(r'✓.*Updates gefunden:\s+(\d+)\s+Pakete?', text, re.IGNORECASE)
+        if match:
+            self.update_info_data["summary"]["total_packages"] = int(match.group(1))
+        
+        # Update display
+        self.update_info_display()
+    
+    def update_info_display(self):
+        """Update the Update Infos panel with structured data (compact format)"""
+        lines = []
+        
+        # Compact header
+        lines.append("Update-Status:")
+        lines.append("")
+        
+        # System - Compact format
+        system_status = self.update_info_data["status"]["system"]
+        if system_status["found"] > 0:
+            lines.append(f"📦 System: ✓ {system_status['found']} Paket{'e' if system_status['found'] > 1 else ''}")
+        elif system_status["current"]:
+            lines.append("📦 System: ○ Aktuell")
+        elif self.update_info_data["planned"]["system"]:
+            lines.append("📦 System: ⏳ Prüfe...")
+        else:
+            lines.append("📦 System: ○ Deaktiviert")
+        
+        # AUR - Compact format
+        aur_status = self.update_info_data["status"]["aur"]
+        if aur_status["found"] > 0:
+            lines.append(f"🔧 AUR: ✓ {aur_status['found']} Paket{'e' if aur_status['found'] > 1 else ''}")
+        elif aur_status["current"]:
+            lines.append("🔧 AUR: ○ Aktuell")
+        elif self.update_info_data["planned"]["aur"]:
+            lines.append("🔧 AUR: ⏳ Prüfe...")
+        else:
+            lines.append("🔧 AUR: ○ Deaktiviert")
+        
+        # Cursor - Compact format with version
+        cursor_status = self.update_info_data["status"]["cursor"]
+        if cursor_status["update_available"]:
+            version_str = cursor_status["version"]
+            lines.append(f"🖱️ Cursor: ✓ Update v{version_str}")
+        elif cursor_status["version"]:
+            lines.append(f"🖱️ Cursor: ○ v{cursor_status['version']}")
+        elif self.update_info_data["planned"]["cursor"]:
+            lines.append("🖱️ Cursor: ⏳ Prüfe...")
+        else:
+            lines.append("🖱️ Cursor: ○ Deaktiviert")
+        
+        # AdGuard - Compact format with version
+        adguard_status = self.update_info_data["status"]["adguard"]
+        if adguard_status["update_available"]:
+            version_str = adguard_status["version"]
+            lines.append(f"🛡️ AdGuard: ✓ Update v{version_str}")
+        elif adguard_status["version"]:
+            lines.append(f"🛡️ AdGuard: ○ v{adguard_status['version']}")
+        elif self.update_info_data["planned"]["adguard"]:
+            lines.append("🛡️ AdGuard: ⏳ Prüfe...")
+        else:
+            lines.append("🛡️ AdGuard: ○ Deaktiviert")
+        
+        # Flatpak - Compact format
+        flatpak_status = self.update_info_data["status"]["flatpak"]
+        if flatpak_status["found"] > 0:
+            lines.append(f"📦 Flatpak: ✓ {flatpak_status['found']} Paket{'e' if flatpak_status['found'] > 1 else ''}")
+        elif flatpak_status["current"]:
+            lines.append("📦 Flatpak: ○ Aktuell")
+        elif self.update_info_data["planned"]["flatpak"]:
+            lines.append("📦 Flatpak: ⏳ Prüfe...")
+        else:
+            lines.append("📦 Flatpak: ○ Deaktiviert")
+        
+        # Summary - Only show if we have updates
+        if self.update_info_data["summary"]["total_packages"] > 0:
+            lines.append("")
+            lines.append(f"✓ {self.update_info_data['summary']['total_packages']} Update{'s' if self.update_info_data['summary']['total_packages'] > 1 else ''} verfügbar")
+        
+        # Save scroll position before updating text
+        scrollbar = self.update_info_text.verticalScrollBar()
+        saved_scroll_value = scrollbar.value()
+        was_at_bottom = saved_scroll_value >= scrollbar.maximum() - 10  # Within 10px of bottom
+        
+        # Update text
+        self.update_info_text.setPlainText("\n".join(lines))
+        
+        # Restore scroll position: only auto-scroll to bottom if user was already at bottom
+        if was_at_bottom:
+            cursor = self.update_info_text.textCursor()
+            cursor.movePosition(cursor.MoveOperation.End)
+            self.update_info_text.setTextCursor(cursor)
+            self.update_info_text.ensureCursorVisible()
+        else:
+            # Restore previous scroll position (after text update, max might have changed)
+            QApplication.processEvents()  # Ensure text is rendered
+            scrollbar.setValue(min(saved_scroll_value, scrollbar.maximum()))
+    
     def on_output_received(self, text: str):
         """Handle output from update script"""
+        # Parse update information
+        self.parse_update_output(text)
+        
         # Filter out progress bar lines that show percentage (to avoid duplication)
         # These lines come from lib/progress.sh and are meant for console output.
         # In the GUI, we already have a progress bar widget, so we filter these lines
         # to avoid showing the same information twice.
         # Format: "[████████████████████████████████████████] 100% [5/5]"
         # Also filter lines with just percentage: "100%"
-        if re.search(r'\[.*\]\s+\d+%\s+\[\d+/\d+\]', text) or re.search(r'^\s*\d+%\s*$', text):
+        # Also filter download progress bars with hashes: "#########" or "##                                                               15.6%"
+        if (re.search(r'\[.*\]\s+\d+%\s+\[\d+/\d+\]', text) or 
+            re.search(r'^\s*\d+%\s*$', text) or
+            re.search(r'^#+\s+\d+\.\d+%', text) or  # Download progress: "######### 15.6%"
+            re.search(r'^#+\s*$', text)):  # Lines with only hashes: "#########"
             # This is a progress bar line - skip it, we already show it in the progress bar widget
+            return
+        
+        # Filter out script version check messages (GUI has its own version check)
+        # These messages are only relevant for console mode
+        if re.search(r'Script-Version prüfen|checking_script_version|Neue Script-Version|new_version_available|Script ist aktuell|script_current|Update-Optionen|update_options|Tipp: Setze ENABLE_AUTO_UPDATE', text, re.IGNORECASE):
+            return
+        
+        # Filter out version check separator lines
+        if re.search(r'^━━+$', text) and ('version' in text.lower() or 'script' in text.lower()):
+            return
+        
+        # Filter out console-specific prompts
+        if re.search(r'Drücke Enter|Press Enter|Enter zum Beenden', text, re.IGNORECASE):
+            return
+        
+        # Filter out separator lines (shown in Update Infos Panel instead)
+        if re.search(r'^━━+$', text):
+            return
+        
+        # Filter out pre-check status lines (shown in Update Infos Panel instead)
+        # These are the summary lines like "📦 System (pacman)... ✓ 1 Paket verfügbar"
+        # Keep only the detailed progress messages in output, not the status summaries
+        if re.search(r'^(📦|🔧|🖱️|🛡️).*System.*pacman|^(📦|🔧|🖱️|🛡️).*AUR|^(📦|🔧|🖱️|🛡️).*Cursor|^(📦|🔧|🖱️|🛡️).*AdGuard|^(📦|🔧|🖱️|🛡️).*Flatpak', text):
+            # This is a status summary line - filter it (shown in Update Infos Panel)
+            return
+        
+        # Filter out "Updates gefunden" summary (shown in Update Infos Panel)
+        if re.search(r'✓.*Updates gefunden:\s+\d+\s+Pakete?', text, re.IGNORECASE):
             return
         
         # Color coding
@@ -729,8 +1144,8 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             self.load_config()
             # Apply theme if changed
-            from theme_manager import ThemeManager
             theme_mode = self.config_manager.get("GUI_THEME", "auto")
+            from theme_manager import ThemeManager
             ThemeManager.apply_theme(theme_mode)
     
     def view_logs(self):
@@ -842,11 +1257,7 @@ class MainWindow(QMainWindow):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         
-        # Open log directory button
-        icon, text = get_fa_icon('folder-open', t("gui_open_log_directory", "Open Log Directory"))
-        open_dir_btn = QPushButton(icon, text) if icon else QPushButton(text)
-        if not icon:
-            apply_fa_font(open_dir_btn)
+        # Open log directory button - Best Practice: Use helper method
         def open_log_directory():
             import subprocess
             import os
@@ -870,15 +1281,11 @@ class MainWindow(QMainWindow):
                     t("gui_info", "Info"),
                     t("gui_log_directory", "Log Directory:") + f"\n{logs_base_dir}"
                 )
-        open_dir_btn.clicked.connect(open_log_directory)
+        open_dir_btn = self._create_fa_button('folder-open', t("gui_open_log_directory", "Open Log Directory"), open_log_directory)
         button_layout.addWidget(open_dir_btn)
         
-        # Close button
-        icon, text = get_fa_icon('times', t("gui_close", "Close"))
-        close_btn = QPushButton(icon, text) if icon else QPushButton(text)
-        if not icon:
-            apply_fa_font(close_btn)
-        close_btn.clicked.connect(dialog.accept)
+        # Close button - Best Practice: Use helper method
+        close_btn = self._create_fa_button('times', t("gui_close", "Close"), dialog.accept)
         button_layout.addWidget(close_btn)
         
         layout.addLayout(button_layout)
@@ -1292,12 +1699,19 @@ class MainWindow(QMainWindow):
         
         toast = show_toast(self, message, duration=5000)
         
-        # Make toast clickable to open update dialog
+        # Make toast clickable to open update dialog - Best Practice: Use ClickableLabel
+        # Note: toast.label might not be a ClickableLabel, so we need to handle it differently
+        # For now, we'll keep the lambda approach but document it
         def on_toast_clicked():
-            self._on_version_label_clicked_update(None)
+            self._on_version_label_clicked_update()
         
-        toast.label.mousePressEvent = lambda e: on_toast_clicked() if e.button() == Qt.MouseButton.LeftButton else None
-        toast.label.setCursor(Qt.CursorShape.PointingHandCursor)
+        # Best Practice: If toast.label supports signals, use clicked.connect()
+        # Otherwise, fallback to mousePressEvent assignment (not ideal, but necessary for compatibility)
+        if hasattr(toast.label, 'clicked'):
+            toast.label.clicked.connect(on_toast_clicked)
+        else:
+            toast.label.mousePressEvent = lambda e: on_toast_clicked() if e.button() == Qt.MouseButton.LeftButton else None
+            toast.label.setCursor(Qt.CursorShape.PointingHandCursor)
     
     def check_version_manual(self):
         """Manually check for version updates"""
@@ -1306,13 +1720,13 @@ class MainWindow(QMainWindow):
         self.check_version_async()
     
     def check_updates(self):
-        """Check for available updates (dry-run mode)"""
+        """Check for available updates (using hybrid approach: wrapper for checks, subprocess for full run)"""
         # Initialize debug logger to ensure it's available
         try:
             from .debug_logger import get_logger
             logger = get_logger()
             logger.info("=" * 80)
-            logger.info("Starting update check (dry-run)")
+            logger.info("Starting update check (hybrid: wrapper for quick checks)")
             logger.info(f"Script directory: {self.script_dir}")
             logger.info(f"Log file: {logger.get_log_file()}")
             logger.info("=" * 80)
@@ -1327,6 +1741,94 @@ class MainWindow(QMainWindow):
             )
             return
         
+        # Use BashWrapper for quick checks (hybrid approach)
+        try:
+            from .bash_wrapper import BashWrapper
+        except ImportError:
+            try:
+                from bash_wrapper import BashWrapper
+            except ImportError:
+                # Fallback to subprocess if wrapper not available
+                BashWrapper = None
+        
+        if BashWrapper:
+            # Use wrapper for quick checks
+            self._check_updates_with_wrapper()
+        else:
+            # Fallback to subprocess (original method)
+            self._check_updates_with_subprocess()
+    
+    def _check_updates_with_wrapper(self):
+        """Check updates using BashWrapper (fast, direct function calls)"""
+        try:
+            from .bash_wrapper import BashWrapper
+        except ImportError:
+            try:
+                from bash_wrapper import BashWrapper
+            except ImportError:
+                # Fallback to subprocess if wrapper not available
+                self.logger.warning("BashWrapper not available, falling back to subprocess")
+                self._check_updates_with_subprocess()
+                return
+        
+        try:
+            # Clear output and show checking message
+            self.output_text.clear()
+            self.output_text.append(t("gui_checking_updates", "Checking for updates..."))
+            self.progress_bar.setValue(0)
+            self.progress_bar.setVisible(True)
+            if hasattr(self, 'status_label'):
+                self.status_label.setText(t("gui_checking", "Checking..."))
+                self.status_label.setVisible(True)
+            
+            # Create wrapper with error handling
+            try:
+                wrapper = BashWrapper(str(self.script_dir))
+            except Exception as e:
+                self.logger.error(f"Failed to create BashWrapper: {e}")
+                # Fallback to subprocess
+                self._check_updates_with_subprocess()
+                return
+            
+            # Check all components with error handling
+            try:
+                results = wrapper.check_all_updates()
+            except Exception as e:
+                self.logger.error(f"Failed to check updates with BashWrapper: {e}")
+                # Fallback to subprocess
+                self._check_updates_with_subprocess()
+                return
+            
+            # Update UI with results
+            try:
+                self._update_info_from_wrapper_results(results)
+            except Exception as e:
+                self.logger.error(f"Failed to update UI from wrapper results: {e}")
+                # Continue anyway - show what we have
+            
+            # Show summary in output
+            try:
+                total_updates = sum(1 for r in results.values() if r.has_update)
+                if total_updates > 0:
+                    self.output_text.append(f"\n✓ {total_updates} Update{'s' if total_updates > 1 else ''} verfügbar")
+                else:
+                    self.output_text.append("\n○ Alle Komponenten sind aktuell")
+            except Exception as e:
+                self.logger.error(f"Failed to show summary: {e}")
+            
+            # Reset UI
+            self.progress_bar.setValue(100)
+            if hasattr(self, 'status_label'):
+                self.status_label.setText(t("gui_ready", "Ready"))
+        except Exception as e:
+            # Any other error - fallback to subprocess
+            self.logger.error(f"Unexpected error in _check_updates_with_wrapper: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+            self._check_updates_with_subprocess()
+    
+    def _check_updates_with_subprocess(self):
+        """Check updates using subprocess (original method, full script execution)"""
         # Check if update-all.sh exists
         script_path = self.script_dir / "update-all.sh"
         if not script_path.exists():
@@ -1389,6 +1891,94 @@ class MainWindow(QMainWindow):
                 t("gui_error", "Error"),
                 t("gui_update_error", "Error during update:\n\n{error}\n\nPlease update manually via git pull.").format(error=str(e))
             )
+    
+    def _update_info_from_wrapper_results(self, results):
+        """Update update_info_data from BashWrapper results"""
+        try:
+            from .bash_wrapper import UpdateCheckResult
+        except ImportError:
+            try:
+                from bash_wrapper import UpdateCheckResult
+            except ImportError:
+                # Fallback: define a simple result structure
+                class UpdateCheckResult:
+                    def __init__(self, component, has_update, current_version=None, available_version=None, package_count=0, error=None):
+                        self.component = component
+                        self.has_update = has_update
+                        self.current_version = current_version
+                        self.available_version = available_version
+                        self.package_count = package_count
+                        self.error = error
+        
+        # Reset update info data
+        self.update_info_data = {
+            "planned": {
+                "system": self.check_system.isChecked(),
+                "aur": self.check_aur.isChecked(),
+                "cursor": self.check_cursor.isChecked(),
+                "adguard": self.check_adguard.isChecked(),
+                "flatpak": self.check_flatpak.isChecked()
+            },
+            "status": {
+                "system": {"found": 0, "current": False},
+                "aur": {"found": 0, "current": False},
+                "cursor": {"version": "", "update_available": False},
+                "adguard": {"version": "", "update_available": False},
+                "flatpak": {"found": 0, "current": False}
+            },
+            "summary": {
+                "total_packages": 0,
+                "components_updated": []
+            }
+        }
+        
+        # Update from results
+        for component, result in results.items():
+            if component == "system":
+                if result.has_update:
+                    self.update_info_data["status"]["system"]["found"] = result.package_count
+                    self.update_info_data["status"]["system"]["current"] = False
+                else:
+                    self.update_info_data["status"]["system"]["current"] = True
+                    self.update_info_data["status"]["system"]["found"] = 0
+            elif component == "aur":
+                if result.has_update:
+                    self.update_info_data["status"]["aur"]["found"] = result.package_count
+                    self.update_info_data["status"]["aur"]["current"] = False
+                else:
+                    self.update_info_data["status"]["aur"]["current"] = True
+                    self.update_info_data["status"]["aur"]["found"] = 0
+            elif component == "cursor":
+                self.update_info_data["status"]["cursor"]["version"] = result.current_version or ""
+                self.update_info_data["status"]["cursor"]["update_available"] = result.has_update
+                if result.available_version:
+                    self.update_info_data["status"]["cursor"]["version"] = f"{result.current_version} → {result.available_version}"
+            elif component == "adguard":
+                self.update_info_data["status"]["adguard"]["version"] = result.current_version or ""
+                self.update_info_data["status"]["adguard"]["update_available"] = result.has_update
+                if result.available_version:
+                    self.update_info_data["status"]["adguard"]["version"] = f"{result.current_version} → {result.available_version}"
+            elif component == "flatpak":
+                if result.has_update:
+                    self.update_info_data["status"]["flatpak"]["found"] = result.package_count
+                    self.update_info_data["status"]["flatpak"]["current"] = False
+                else:
+                    self.update_info_data["status"]["flatpak"]["current"] = True
+                    self.update_info_data["status"]["flatpak"]["found"] = 0
+        
+        # Calculate total packages
+        total = 0
+        total += self.update_info_data["status"]["system"]["found"]
+        total += self.update_info_data["status"]["aur"]["found"]
+        total += self.update_info_data["status"]["flatpak"]["found"]
+        if self.update_info_data["status"]["cursor"]["update_available"]:
+            total += 1
+        if self.update_info_data["status"]["adguard"]["update_available"]:
+            total += 1
+        self.update_info_data["summary"]["total_packages"] = total
+        
+        # Update display
+        self.update_info_display()
     
     def _on_start_button_clicked(self):
         """Handle start button click - wrapper to add logging"""
@@ -1540,30 +2130,6 @@ class MainWindow(QMainWindow):
             self.btn_stop.setEnabled(False)
             self.btn_stop.setVisible(False)
     
-    def on_output_received(self, text: str):
-        """Handle output from update runner"""
-        # Filter out console-specific prompts that are confusing in GUI
-        # These are only relevant for console version
-        filtered_patterns = [
-            "Drücke Enter",
-            "Press Enter",
-            "Enter um das Fenster",
-            "Enter to close",
-            "zum Beenden",
-            "to close",
-            "read -r -p",
-        ]
-        
-        # Check if line contains any of the filtered patterns
-        should_filter = any(pattern.lower() in text.lower() for pattern in filtered_patterns)
-        
-        if not should_filter:
-            self.output_text.append(text)
-            # Auto-scroll to bottom
-            cursor = self.output_text.textCursor()
-            cursor.movePosition(QTextCursor.MoveOperation.End)
-            self.output_text.setTextCursor(cursor)
-    
     def on_error_occurred(self, error_msg: str):
         """Handle error from update runner"""
         QMessageBox.critical(
@@ -1673,12 +2239,19 @@ class MainWindow(QMainWindow):
         self.logger.info("=" * 80)
     
     def update_version_label(self):
-        """Update version label with GitHub version and status colors"""
+        """Update version label with GitHub version and status colors
+        
+        Best Practice: Uses ClickableLabel signals instead of mousePressEvent assignments
+        """
         if not hasattr(self, 'version_label'):
             return
         
         if not hasattr(self, 'latest_github_version'):
             self.latest_github_version = None
+        
+        # Disconnect all previous connections to avoid duplicates
+        # Best Practice: Use helper method
+        self._safe_disconnect_signal(self.version_label.clicked)
         
         if self.latest_github_version:
             if self.latest_github_version == "error":
@@ -1686,8 +2259,7 @@ class MainWindow(QMainWindow):
                 self.version_label.setText(f"v{self.script_version} (Lokal)")
                 self.version_label.setStyleSheet("color: #666;")
                 self.version_label.setToolTip(t("gui_version_check_failed", "Version check failed"))
-                self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
-                self.version_label.mousePressEvent = self._on_version_label_clicked
+                self._safe_connect_signal(self.version_label.clicked, self._on_version_label_clicked, disconnect_first=False)
                 # Hide update badge
                 if hasattr(self, 'update_badge'):
                     self.update_badge.setVisible(False)
@@ -1724,12 +2296,11 @@ class MainWindow(QMainWindow):
                     # Update available - RED
                     self.version_label.setText(f"v{self.script_version} → v{self.latest_github_version} ⬇")
                     self.version_label.setStyleSheet("color: #dc3545; font-weight: bold;")
-                    self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
                     tooltip_text = t("gui_version_click_to_update", "Click to update")
                     tooltip_text += f"\n{t('gui_local_version', 'Local')}: v{self.script_version}"
                     tooltip_text += f"\n{t('gui_github_version', 'GitHub')}: v{self.latest_github_version}"
                     self.version_label.setToolTip(tooltip_text)
-                    self.version_label.mousePressEvent = self._on_version_label_clicked_update
+                    self._safe_connect_signal(self.version_label.clicked, self._on_version_label_clicked_update, disconnect_first=False)
                     # Show update badge
                     if hasattr(self, 'update_badge'):
                         self.update_badge.setVisible(True)
@@ -1737,12 +2308,11 @@ class MainWindow(QMainWindow):
                     # Up to date - GREEN
                     self.version_label.setText(f"v{self.script_version} ✓")
                     self.version_label.setStyleSheet("color: #28a745;")
-                    self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
                     tooltip_text = t("gui_version_up_to_date", "Version is up to date")
                     tooltip_text += f"\n{t('gui_local_version', 'Local')}: v{self.script_version}"
                     tooltip_text += f"\n{t('gui_github_version', 'GitHub')}: v{self.latest_github_version}"
                     self.version_label.setToolTip(tooltip_text)
-                    self.version_label.mousePressEvent = self._on_version_label_clicked
+                    self._safe_connect_signal(self.version_label.clicked, self._on_version_label_clicked, disconnect_first=False)
                     # Hide update badge
                     if hasattr(self, 'update_badge'):
                         self.update_badge.setVisible(False)
@@ -1750,12 +2320,11 @@ class MainWindow(QMainWindow):
                     # Local is newer (development version) - GREEN
                     self.version_label.setText(f"v{self.script_version} (Dev)")
                     self.version_label.setStyleSheet("color: #28a745;")
-                    self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
                     tooltip_text = t("gui_version_dev", "Development version (local is newer)")
                     tooltip_text += f"\n{t('gui_local_version', 'Local')}: v{self.script_version}"
                     tooltip_text += f"\n{t('gui_github_version', 'GitHub')}: v{self.latest_github_version}"
                     self.version_label.setToolTip(tooltip_text)
-                    self.version_label.mousePressEvent = self._on_version_label_clicked
+                    self._safe_connect_signal(self.version_label.clicked, self._on_version_label_clicked, disconnect_first=False)
                     # Hide update badge
                     if hasattr(self, 'update_badge'):
                         self.update_badge.setVisible(False)
@@ -1764,8 +2333,7 @@ class MainWindow(QMainWindow):
             self.version_label.setText(f"v{self.script_version} (Lokal)")
             self.version_label.setStyleSheet("color: #666;")
             self.version_label.setToolTip(t("gui_version_check_tooltip", "Click to check for updates"))
-            self.version_label.setCursor(Qt.CursorShape.PointingHandCursor)
-            self.version_label.mousePressEvent = self._on_version_label_clicked
+            self._safe_connect_signal(self.version_label.clicked, self._on_version_label_clicked, disconnect_first=False)
             # Hide update badge
             if hasattr(self, 'update_badge'):
                 self.update_badge.setVisible(False)
@@ -1774,48 +2342,49 @@ class MainWindow(QMainWindow):
         """Open download page for update"""
         self.open_github_releases()
     
-    def _on_version_label_clicked(self, event):
-        """Handle version label click - check for updates"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.check_version_manual()
-        event.accept()
+    def _on_version_label_clicked(self):
+        """Handle version label click - check for updates
+        
+        Best Practice: Signal handler without event parameter (ClickableLabel.clicked signal)
+        """
+        self.check_version_manual()
     
-    def _on_version_label_clicked_update(self, event):
-        """Handle version label click when update is available - open update dialog"""
-        if event and event.button() == Qt.MouseButton.LeftButton:
-            # Open update dialog (will be created in next step)
+    def _on_version_label_clicked_update(self):
+        """Handle version label click when update is available - open update dialog
+        
+        Best Practice: Signal handler without event parameter (ClickableLabel.clicked signal)
+        """
+        # Open update dialog (will be created in next step)
+        try:
+            from .update_dialog import UpdateDialog
+        except ImportError:
             try:
-                from .update_dialog import UpdateDialog
+                from update_dialog import UpdateDialog
             except ImportError:
-                try:
-                    from update_dialog import UpdateDialog
-                except ImportError:
-                    # Fallback: use old method if dialog doesn't exist yet
-                    reply = QMessageBox.question(
-                        self,
-                        t("gui_update_available", "Update Available"),
-                        t("gui_update_confirm", "Update to version {version} is available.\n\nDo you want to update now?").format(version=self.latest_github_version),
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                        QMessageBox.StandardButton.Yes
-                    )
-                    
-                    if reply == QMessageBox.StandardButton.Yes:
-                        self.perform_automatic_update()
-                    event.accept()
-                    return
-            
-            # Open update dialog
-            dialog = UpdateDialog(
-                self.script_dir,
-                self.script_version,
-                self.latest_github_version,
-                self.version_checker,
-                parent=self
-            )
-            if dialog.exec() == QDialog.DialogCode.Accepted:
-                # Update was performed, refresh version check
-                self.check_version_async()
-        event.accept()
+                # Fallback: use old method if dialog doesn't exist yet
+                reply = QMessageBox.question(
+                    self,
+                    t("gui_update_available", "Update Available"),
+                    t("gui_update_confirm", "Update to version {version} is available.\n\nDo you want to update now?").format(version=self.latest_github_version),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.Yes
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.perform_automatic_update()
+                return
+        
+        # Open update dialog
+        dialog = UpdateDialog(
+            self.script_dir,
+            self.script_version,
+            self.latest_github_version,
+            self.version_checker,
+            parent=self
+        )
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            # Update was performed, refresh version check
+            self.check_version_async()
     
     def check_tool_version(self):
         """Check tool version (alias for check_version_async)"""
@@ -2884,113 +3453,117 @@ class MainWindow(QMainWindow):
                 t("gui_restart_error", "Error restarting application:\n\n{error}\n\nPlease restart manually.").format(error=str(e))
             )
     
-    def _on_language_label_clicked(self, event):
-        """Handle language label click with feedback effect"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            # Get the widget that was clicked (the parent widget)
-            widget = None
-            if hasattr(self, 'language_icon_label') and self.language_icon_label is not None:
-                widget = self.language_icon_label.parent()
-            
-            # Cancel any pending restore operation from previous clicks
-            if self.language_feedback_timer and self.language_feedback_timer.isActive():
-                self.language_feedback_timer.stop()
-            
-            # Visual feedback: briefly change opacity using QGraphicsOpacityEffect
-            original_effect = None
-            if widget and widget.isVisible():
-                try:
-                    # Store original effect BEFORE clearing any existing feedback effect
-                    # This ensures we can restore it later
-                    current_effect = widget.graphicsEffect()
-                    
-                    # If there's already a feedback effect active, use the stored original effect
-                    if self.language_feedback_effect and current_effect == self.language_feedback_effect:
-                        # Restore the original effect that was stored before the first feedback
-                        original_effect = self.language_feedback_original_effect
-                        # Clear the current feedback effect
-                        widget.setGraphicsEffect(None)
-                    else:
-                        # No feedback effect active, store the current effect as original
-                        original_effect = current_effect
-                        # Save it for future clicks
-                        self.language_feedback_original_effect = original_effect
-                    
-                    # Create and apply opacity effect
-                    opacity_effect = QGraphicsOpacityEffect()
-                    opacity_effect.setOpacity(0.6)
-                    widget.setGraphicsEffect(opacity_effect)
-                    self.language_feedback_effect = opacity_effect  # Store reference
-                    QApplication.processEvents()
-                except Exception:
-                    pass  # Ignore effect errors
-            
-            # Switch language
+    def _on_language_label_clicked(self):
+        """Handle language label click with feedback effect
+        
+        Best Practice: Signal handler (no event parameter needed)
+        """
+        # Get the widget that was clicked (the parent widget)
+        widget = None
+        if hasattr(self, 'language_icon_label') and self.language_icon_label is not None:
+            widget = self.language_icon_label.parent()
+        
+        # Cancel any pending restore operation from previous clicks
+        if self.language_feedback_timer and self.language_feedback_timer.isActive():
+            self.language_feedback_timer.stop()
+        
+        # Visual feedback: briefly change opacity using QGraphicsOpacityEffect
+        original_effect = None
+        if widget and widget.isVisible():
             try:
-                self.switch_language()
-            except Exception as e:
-                # Log error but don't crash
-                import traceback
-                print(f"Error switching language: {e}")
-                traceback.print_exc()
-            
-            # Restore original effect after short delay
-            # Define restore_effect function outside the if widget block to avoid NameError
-            def restore_effect():
-                try:
-                    if widget and widget.isVisible():
-                        # Only restore if the current effect is still our feedback effect
-                        current_effect = widget.graphicsEffect()
-                        if current_effect == self.language_feedback_effect:
-                            # Restore original effect (or None if there was none)
-                            widget.setGraphicsEffect(original_effect)
-                            self.language_feedback_effect = None
-                            # Clear stored original effect after restoration
-                            self.language_feedback_original_effect = None
-                except Exception:
-                    pass  # Ignore restore errors
-            
-            # Only set up timer if widget exists
-            if widget:
-                # Create timer if it doesn't exist
-                if self.language_feedback_timer is None:
-                    self.language_feedback_timer = QTimer()
-                    self.language_feedback_timer.setSingleShot(True)
-                    self.language_feedback_timer.timeout.connect(restore_effect)
-                    self.language_feedback_restore_func = restore_effect
-                else:
-                    # Disconnect previous connection if it exists
-                    if self.language_feedback_restore_func is not None:
-                        try:
-                            self.language_feedback_timer.timeout.disconnect(self.language_feedback_restore_func)
-                        except TypeError:
-                            # If disconnect fails, try disconnecting all (fallback)
-                            try:
-                                self.language_feedback_timer.timeout.disconnect()
-                            except TypeError:
-                                pass  # No connections to disconnect
-                    # Connect new restore function
-                    self.language_feedback_timer.timeout.connect(restore_effect)
-                    self.language_feedback_restore_func = restore_effect
+                # Store original effect BEFORE clearing any existing feedback effect
+                # This ensures we can restore it later
+                current_effect = widget.graphicsEffect()
                 
-                self.language_feedback_timer.start(150)
-        event.accept()
+                # If there's already a feedback effect active, use the stored original effect
+                if self.language_feedback_effect and current_effect == self.language_feedback_effect:
+                    # Restore the original effect that was stored before the first feedback
+                    original_effect = self.language_feedback_original_effect
+                    # Clear the current feedback effect
+                    widget.setGraphicsEffect(None)
+                else:
+                    # No feedback effect active, store the current effect as original
+                    original_effect = current_effect
+                    # Save it for future clicks
+                    self.language_feedback_original_effect = original_effect
+                
+                # Create and apply opacity effect
+                opacity_effect = QGraphicsOpacityEffect()
+                opacity_effect.setOpacity(0.6)
+                widget.setGraphicsEffect(opacity_effect)
+                self.language_feedback_effect = opacity_effect  # Store reference
+                QApplication.processEvents()
+            except Exception:
+                pass  # Ignore effect errors
+        
+        # Switch language
+        try:
+            self.switch_language()
+        except Exception as e:
+            # Log error but don't crash
+            import traceback
+            print(f"Error switching language: {e}")
+            traceback.print_exc()
+        
+        # Restore original effect after short delay
+        # Define restore_effect function outside the if widget block to avoid NameError
+        def restore_effect():
+            try:
+                if widget and widget.isVisible():
+                    # Only restore if the current effect is still our feedback effect
+                    current_effect = widget.graphicsEffect()
+                    if current_effect == self.language_feedback_effect:
+                        # Restore original effect (or None if there was none)
+                        widget.setGraphicsEffect(original_effect)
+                        self.language_feedback_effect = None
+                        # Clear stored original effect after restoration
+                        self.language_feedback_original_effect = None
+            except Exception:
+                pass  # Ignore restore errors
+        
+        # Only set up timer if widget exists
+        if widget:
+            # Create timer if it doesn't exist
+            if self.language_feedback_timer is None:
+                self.language_feedback_timer = QTimer()
+                self.language_feedback_timer.setSingleShot(True)
+                self.language_feedback_timer.timeout.connect(restore_effect)
+                self.language_feedback_restore_func = restore_effect
+            else:
+                # Disconnect previous connection if it exists
+                if self.language_feedback_restore_func is not None:
+                    try:
+                        self.language_feedback_timer.timeout.disconnect(self.language_feedback_restore_func)
+                    except TypeError:
+                        # If disconnect fails, try disconnecting all (fallback)
+                        try:
+                            self.language_feedback_timer.timeout.disconnect()
+                        except TypeError:
+                            pass  # No connections to disconnect
+                # Connect new restore function
+                self.language_feedback_timer.timeout.connect(restore_effect)
+                self.language_feedback_restore_func = restore_effect
+            
+            self.language_feedback_timer.start(150)
     
-    def _on_theme_label_clicked(self, event):
-        """Handle theme label click"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.switch_theme()
-        event.accept()
+    def _on_theme_label_clicked(self):
+        """Handle theme label click
+        
+        Best Practice: Signal handler (no event parameter needed)
+        """
+        self.switch_theme()
     
-    def _on_changelog_label_clicked(self, event):
-        """Handle changelog label click"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.open_github_releases()
-        event.accept()
+    def _on_changelog_label_clicked(self):
+        """Handle changelog label click
+        
+        Best Practice: Signal handler (no event parameter needed)
+        """
+        self.open_github_releases()
     
-    def _on_github_label_clicked(self, event):
-        """Handle GitHub label click"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.open_github()
-        event.accept()
+    def _on_github_label_clicked(self):
+        """Handle GitHub label click
+        
+        Best Practice: Signal handler (no event parameter needed)
+        """
+        self.open_github()
 

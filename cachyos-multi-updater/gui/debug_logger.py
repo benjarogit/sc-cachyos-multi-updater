@@ -108,6 +108,13 @@ class DebugLogger:
         
         self._initialized = True
         self.log_file = log_file
+        
+        # Best Practice: Cleanup old logs on initialization
+        try:
+            self.cleanup_old_logs(keep_last=5)
+        except Exception:
+            pass  # Don't fail if cleanup fails
+        
         if log_file:
             try:
                 self.logger.info("=" * 80)

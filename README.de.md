@@ -18,26 +18,28 @@ Ein einfaches One-Click-Update-Tool für CachyOS, das automatisch System-Pakete,
 
 2. **Setup ausführen (empfohlen für Erstinstallation):**
    ```bash
-   ./cachyos-update
+   cd cachyos-multi-updater
+   ./setup.sh
    ```
-   Wähle Option `1` um das Setup auszuführen, das dich durch die Konfiguration führt und eine Desktop-Verknüpfung erstellt.
+   Dies führt dich durch die Konfiguration und erstellt eine Desktop-Verknüpfung.
 
 3. **Updates starten:**
    ```bash
-   ./cachyos-update
+   ./cachyos-update-gui
    ```
-   Wähle Option `2` um Updates zu starten.
+   Oder verwende die während des Setups erstellte Desktop-Verknüpfung.
 
 ### Start-Kommandos
 
-**Console-Version (mit Menü):**
-```bash
-./cachyos-update
-```
-
-**GUI-Version:**
+**GUI-Version (empfohlen):**
 ```bash
 ./cachyos-update-gui
+```
+
+**Direkte Script-Ausführung:**
+```bash
+cd cachyos-multi-updater
+./update-all.sh
 ```
 
 ### Grundlegende Konfiguration
@@ -87,10 +89,31 @@ Dieses Script macht all das automatisch und spart dir Zeit, während es sicherst
 - ✅ **System-Updates** - Aktualisiert CachyOS-Pakete via pacman
 - ✅ **AUR-Updates** - Aktualisiert AUR-Pakete via yay/paru
 - ✅ **Cursor Editor** - Automatischer Download und Update (Versionsprüfung vor Download)
+  - Unterstützt mehrere Installationsmethoden: pacman, AUR, Flatpak, AppImage, manuell
+  - Hybrid-Versionsprüfung (package.json, GitHub API, HTTP HEAD)
+  - Automatische Duplikat-Erkennung und -Verhinderung
 - ✅ **Flatpak-Anwendungen** - Aktualisiert alle Flatpak-Apps und Laufzeiten
 - ✅ **AdGuard Home** - Automatisches Update mit Konfigurations-Backup
-- ✅ **Automatische Bereinigung** - Entfernt alte Pakete, Caches und temporäre Dateien
-- ✅ **GUI-Version** - Moderne Qt-basierte grafische Oberfläche mit Echtzeit-Fortschritt, sicherer Passwort-Verwaltung, Log-Viewer und umfassendem Einstellungs-Dialog
+  - Unterstützt mehrere Installationsmethoden: pacman, AUR, Docker, manuell
+  - Automatisches Backup-Management (konfigurierbare Aufbewahrung)
+  - Docker-Container-Update-Unterstützung
+- ✅ **Multi-Distribution-Support** - Funktioniert auf Arch, Debian, Fedora, openSUSE
+  - Automatische Distribution-Erkennung
+  - Paketmanager-Abstraktion (pacman, apt, dnf, zypper)
+  - Distribution-spezifische Bereinigungsoperationen
+- ✅ **Erweiterte Bereinigung** - Umfassende Systembereinigung
+  - Verwaiste Pakete entfernen (distribution-spezifisch)
+  - Paket-Cache-Bereinigung
+  - Temporäre Dateien entfernen
+  - Alte Backups bereinigen (konfigurierbar)
+  - Icon-Cache-Updates (GTK, KDE, Desktop-Datenbank)
+  - Konfigurierbare Aggressivität und Zeitpunkt
+- ✅ **GUI-Version** - Moderne Qt-basierte grafische Oberfläche
+  - Echtzeit-Fortschrittsanzeige
+  - Strukturiertes Update-Infos-Panel
+  - Sichere Passwort-Verwaltung
+  - Log-Viewer
+  - Umfassender Einstellungsdialog mit Cleanup-Konfiguration
 - ✅ **Interaktiver Modus** - Wähle was aktualisiert werden soll
 - ✅ **Dry-Run-Modus** - Vorschau der Änderungen ohne sie durchzuführen
 - ✅ **Statistiken** - Verfolge Update-Historie und Erfolgsraten
@@ -102,14 +125,16 @@ Dieses Script macht all das automatisch und spart dir Zeit, während es sicherst
 ## 📋 Voraussetzungen
 
 ### Erforderlich:
-- **CachyOS oder Arch Linux**
+- **Linux-Distribution** (Arch/CachyOS, Debian/Ubuntu, Fedora/RHEL, openSUSE)
 - **sudo-Berechtigungen**
 - **Internetverbindung**
 
 ### Optional:
-- **AUR-Helper** (yay oder paru) - für AUR-Paket-Updates
-- **Cursor Editor** - für Cursor-Updates
-- **AdGuard Home** - für AdGuard-Updates (muss in `~/AdGuardHome` sein)
+- **AUR-Helper** (yay oder paru) - für AUR-Paket-Updates (nur Arch-basiert)
+- **Cursor Editor** - für Cursor-Updates (unterstützt mehrere Installationsmethoden)
+- **AdGuard Home** - für AdGuard-Updates (unterstützt pacman, AUR, Docker, manuelle Installation)
+- **Docker** - für Docker-basierte AdGuard-Updates
+- **Flatpak** - für Flatpak-Anwendungs-Updates
 - **PyQt6** - für GUI-Version (`pip3 install PyQt6`)
 
 ---

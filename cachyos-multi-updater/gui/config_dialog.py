@@ -56,7 +56,7 @@ class ConfigDialog(QDialog):
             self.script_dir = script_dir
             self.config_manager = ConfigManager(script_dir)
             self.config = self.config_manager.load_config()
-            self.setWindowTitle("Settings")
+            self.setWindowTitle(t("gui_settings", "Settings"))
             self.setMinimumWidth(600)
             self.setMinimumHeight(500)
             self.init_ui()
@@ -153,7 +153,7 @@ class ConfigDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.setContentsMargins(12, 12, 12, 12)
         
-        icon, text = get_fa_icon('undo', "Reset to Defaults")
+        icon, text = get_fa_icon('undo', t("gui_reset_to_defaults", "Reset to Defaults"))
         reset_btn = QPushButton(icon, text) if icon else QPushButton(text)
         if not icon:
             apply_fa_font(reset_btn)
@@ -162,14 +162,14 @@ class ConfigDialog(QDialog):
         
         button_layout.addStretch()
         
-        icon, text = get_fa_icon('times', "Cancel")
+        icon, text = get_fa_icon('times', t("gui_cancel", "Cancel"))
         cancel_btn = QPushButton(icon, text) if icon else QPushButton(text)
         if not icon:
             apply_fa_font(cancel_btn)
         cancel_btn.clicked.connect(self.reject)
         button_layout.addWidget(cancel_btn)
         
-        icon, text = get_fa_icon('save', "Save")
+        icon, text = get_fa_icon('save', t("gui_save", "Save"))
         save_btn = QPushButton(icon, text) if icon else QPushButton(text)
         if not icon:
             apply_fa_font(save_btn)
@@ -519,7 +519,7 @@ class ConfigDialog(QDialog):
         self.cache_max_age = QSpinBox()
         self.cache_max_age.setMinimum(60)
         self.cache_max_age.setMaximum(86400)
-        self.cache_max_age.setSuffix(" seconds")
+        self.cache_max_age.setSuffix(" " + t("gui_seconds", "seconds"))
         self.cache_max_age.setToolTip(t("gui_cache_max_age_tooltip", "Maximum age of cached data in seconds before it is refreshed."))
         form.addRow(t("gui_cache_max_age", "Cache Max Age:"), self.cache_max_age)
         
@@ -527,7 +527,7 @@ class ConfigDialog(QDialog):
         log_layout = QHBoxLayout()
         self.log_dir = QLineEdit()
         self.log_dir.setToolTip(t("gui_log_dir_tooltip", "Directory where log files are stored"))
-        icon, text = get_fa_icon('folder-open', "Browse...")
+        icon, text = get_fa_icon('folder-open', t("gui_browse", "Browse..."))
         log_browse = QPushButton(icon, text) if icon else QPushButton(text)
         if not icon:
             apply_fa_font(log_browse)
@@ -540,7 +540,7 @@ class ConfigDialog(QDialog):
         stats_layout = QHBoxLayout()
         self.stats_dir = QLineEdit()
         self.stats_dir.setToolTip(t("gui_stats_dir_tooltip", "Directory where statistics files are stored"))
-        icon, text = get_fa_icon('folder-open', "Browse...")
+        icon, text = get_fa_icon('folder-open', t("gui_browse", "Browse..."))
         stats_browse = QPushButton(icon, text) if icon else QPushButton(text)
         if not icon:
             apply_fa_font(stats_browse)
@@ -706,7 +706,7 @@ class ConfigDialog(QDialog):
         script_layout = QHBoxLayout()
         self.script_path = QLineEdit()
         self.script_path.setToolTip(t("gui_script_path_tooltip", "Path to the update-all.sh script"))
-        icon, text = get_fa_icon('folder-open', "Browse...")
+        icon, text = get_fa_icon('folder-open', t("gui_browse", "Browse..."))
         script_browse = QPushButton(icon, text) if icon else QPushButton(text)
         if not icon:
             apply_fa_font(script_browse)
@@ -716,6 +716,73 @@ class ConfigDialog(QDialog):
         form.addRow(t("gui_script_path", "Script Path:"), script_layout)
         
         layout.addLayout(form)
+        
+        # Cleanup Settings Group
+        cleanup_group = QGroupBox(t("gui_cleanup_settings", "Cleanup Settings"))
+        cleanup_layout = QVBoxLayout()
+        
+        cleanup_info = QLabel(t("gui_cleanup_info", "Configure system cleanup behavior after updates"))
+        cleanup_info.setWordWrap(True)
+        cleanup_layout.addWidget(cleanup_info)
+        
+        cleanup_form = QFormLayout()
+        
+        # Cleanup Aggressiveness
+        self.cleanup_aggressiveness = QComboBox()
+        self.cleanup_aggressiveness.addItems([
+            t("gui_cleanup_safe", "Safe"),
+            t("gui_cleanup_moderate", "Moderate"),
+            t("gui_cleanup_aggressive", "Aggressive")
+        ])
+        self.cleanup_aggressiveness.setToolTip(t("gui_cleanup_aggressiveness_tooltip", "Safe: Only obvious unused files\nModerate: Includes old caches (with confirmation)\nAggressive: All caches, temp files, old backups"))
+        cleanup_form.addRow(t("gui_cleanup_aggressiveness", "Cleanup Aggressiveness:"), self.cleanup_aggressiveness)
+        
+        # Cleanup Timing
+        self.cleanup_timing = QComboBox()
+        self.cleanup_timing.addItems([
+            t("gui_cleanup_after_updates", "After Updates"),
+            t("gui_cleanup_manual", "Manual Only"),
+            t("gui_cleanup_never", "Never")
+        ])
+        self.cleanup_timing.setToolTip(t("gui_cleanup_timing_tooltip", "When to perform cleanup operations"))
+        cleanup_form.addRow(t("gui_cleanup_timing", "Cleanup Timing:"), self.cleanup_timing)
+        
+        # Cleanup Options - Use FACheckBox for consistency
+        try:
+            from .fa_checkbox import FACheckBox
+        except ImportError:
+            try:
+                from fa_checkbox import FACheckBox
+            except ImportError:
+                FACheckBox = QCheckBox  # Fallback to QCheckBox if FACheckBox not available
+        
+        self.cleanup_orphans = FACheckBox(t("gui_cleanup_orphans", "Remove Orphan Packages"))
+        self.cleanup_orphans.setToolTip(t("gui_cleanup_orphans_tooltip", "Remove packages that are no longer needed"))
+        cleanup_form.addRow("", self.cleanup_orphans)
+        
+        self.cleanup_cache = FACheckBox(t("gui_cleanup_cache", "Clean Package Cache"))
+        self.cleanup_cache.setToolTip(t("gui_cleanup_cache_tooltip", "Clean package manager cache"))
+        cleanup_form.addRow("", self.cleanup_cache)
+        
+        self.cleanup_temp = FACheckBox(t("gui_cleanup_temp", "Remove Temporary Files"))
+        self.cleanup_temp.setToolTip(t("gui_cleanup_temp_tooltip", "Remove temporary files from /tmp"))
+        cleanup_form.addRow("", self.cleanup_temp)
+        
+        # Icon Cache Update
+        self.icon_cache_update = QComboBox()
+        self.icon_cache_update.addItems([
+            t("gui_icon_cache_both", "Both (After Shortcuts & Updates)"),
+            t("gui_icon_cache_after_shortcut", "After Creating Shortcuts"),
+            t("gui_icon_cache_after_updates", "After Updates"),
+            t("gui_icon_cache_manual", "Manual Only")
+        ])
+        self.icon_cache_update.setToolTip(t("gui_icon_cache_update_tooltip", "When to update icon caches (GTK, KDE, Desktop Database)"))
+        cleanup_form.addRow(t("gui_icon_cache_update", "Icon Cache Update:"), self.icon_cache_update)
+        
+        cleanup_layout.addLayout(cleanup_form)
+        cleanup_group.setLayout(cleanup_layout)
+        layout.addWidget(cleanup_group)
+        
         layout.addStretch()
         
         widget.setLayout(layout)
@@ -939,48 +1006,137 @@ class ConfigDialog(QDialog):
         system_group.setLayout(system_layout)
         layout.addWidget(system_group)
         
-        # Open Console Version button
-        console_layout = QHBoxLayout()
-        console_layout.addStretch()
+        # Wine, Proton-GE and Steam detection
+        gaming_group = QGroupBox(t("gui_info_gaming", "Gaming Software"))
+        gaming_layout = QVBoxLayout()
         
-        icon, text = get_fa_icon('terminal', t("gui_open_console_version", "Open Console Version"))
-        if not icon:
-            # Use a simple text icon if Font Awesome not available
-            text = "▶ " + text
-        console_btn = QPushButton(icon, text) if icon else QPushButton(text)
-        if not icon:
-            apply_fa_font(console_btn)
-        console_btn.clicked.connect(self.open_console_version)
-        console_layout.addWidget(console_btn)
+        gaming_info = QTextEdit()
+        gaming_info.setReadOnly(True)
+        gaming_info.setMaximumHeight(100)
+        gaming_info_text = ""
         
-        layout.addLayout(console_layout)
+        # Check for Wine
+        try:
+            result = subprocess.run(['which', 'wine'], capture_output=True, text=True, timeout=1)
+            if result.returncode == 0:
+                wine_version = subprocess.run(['wine', '--version'], capture_output=True, text=True, timeout=1)
+                if wine_version.returncode == 0:
+                    gaming_info_text += f"Wine: {wine_version.stdout.strip()}\n"
+                else:
+                    gaming_info_text += "Wine: Installed\n"
+            else:
+                gaming_info_text += "Wine: Not installed\n"
+        except Exception:
+            gaming_info_text += "Wine: Unknown\n"
+        
+        # Check for Proton-GE
+        try:
+            proton_paths = [
+                Path.home() / ".steam" / "steam" / "compatibilitytools.d",
+                Path.home() / ".local" / "share" / "Steam" / "compatibilitytools.d",
+            ]
+            proton_found = False
+            for path in proton_paths:
+                if path.exists():
+                    proton_dirs = [d for d in path.iterdir() if d.is_dir() and 'Proton' in d.name]
+                    if proton_dirs:
+                        gaming_info_text += f"Proton-GE: Installed ({len(proton_dirs)} version(s))\n"
+                        proton_found = True
+                        break
+            if not proton_found:
+                gaming_info_text += "Proton-GE: Not installed\n"
+        except Exception:
+            gaming_info_text += "Proton-GE: Unknown\n"
+        
+        # Check for Steam
+        try:
+            result = subprocess.run(['which', 'steam'], capture_output=True, text=True, timeout=1)
+            if result.returncode == 0:
+                gaming_info_text += "Steam: Installed\n"
+            else:
+                gaming_info_text += "Steam: Not installed\n"
+        except Exception:
+            gaming_info_text += "Steam: Unknown\n"
+        
+        gaming_info.setPlainText(gaming_info_text.strip())
+        gaming_layout.addWidget(gaming_info)
+        gaming_group.setLayout(gaming_layout)
+        layout.addWidget(gaming_group)
+        
+        # Update Statistics
+        stats_group = QGroupBox(t("gui_info_statistics", "Update Statistics"))
+        stats_layout = QVBoxLayout()
+        
+        stats_info = QTextEdit()
+        stats_info.setReadOnly(True)
+        stats_info.setMaximumHeight(150)
+        stats_info_text = ""
+        
+        # Load statistics from JSON file
+        # Use configured STATS_DIR or default to .stats
+        stats_dir_path = self.config.get("STATS_DIR", str(Path(self.script_dir) / ".stats"))
+        stats_dir = Path(stats_dir_path)
+        stats_file = stats_dir / "stats.json"
+        
+        try:
+            if stats_file.exists():
+                import json
+                with open(stats_file, 'r', encoding='utf-8') as f:
+                    stats_data = json.load(f)
+                
+                total_updates = stats_data.get("total_updates", 0)
+                successful = stats_data.get("successful_updates", 0)
+                failed = stats_data.get("failed_updates", 0)
+                avg_duration = stats_data.get("avg_duration", 0)
+                last_update = stats_data.get("last_update", "")
+                last_duration = stats_data.get("last_duration", 0)
+                
+                # Calculate success rate
+                success_rate = 0
+                if total_updates > 0:
+                    success_rate = (successful * 100) // total_updates
+                
+                # Format average duration
+                avg_minutes = avg_duration // 60
+                avg_seconds = avg_duration % 60
+                
+                # Format last update date
+                last_update_formatted = "Never"
+                if last_update:
+                    try:
+                        from datetime import datetime
+                        dt = datetime.fromisoformat(last_update.replace('Z', '+00:00'))
+                        last_update_formatted = dt.strftime('%d.%m.%Y %H:%M')
+                    except Exception:
+                        last_update_formatted = last_update
+                
+                # Format last duration
+                last_minutes = last_duration // 60
+                last_seconds = last_duration % 60
+                
+                stats_info_text = f"{t('gui_stats_total_updates', 'Total Updates')}: {total_updates}\n"
+                stats_info_text += f"{t('gui_stats_successful', 'Successful')}: {successful}\n"
+                stats_info_text += f"{t('gui_stats_failed', 'Failed')}: {failed}\n"
+                stats_info_text += f"{t('gui_stats_success_rate', 'Success Rate')}: {success_rate}%\n"
+                stats_info_text += f"{t('gui_stats_avg_duration', 'Average Duration')}: {avg_minutes}m {avg_seconds}s\n"
+                stats_info_text += f"{t('gui_stats_last_update', 'Last Update')}: {last_update_formatted}\n"
+                if last_duration > 0:
+                    stats_info_text += f"{t('gui_stats_last_duration', 'Last Duration')}: {last_minutes}m {last_seconds}s"
+            else:
+                stats_info_text = t("gui_stats_no_data", "No statistics available yet.\nRun an update to generate statistics.")
+        except Exception as e:
+            self.logger.debug(f"Failed to load statistics: {e}")
+            stats_info_text = t("gui_stats_error", "Error loading statistics")
+        
+        stats_info.setPlainText(stats_info_text.strip())
+        stats_layout.addWidget(stats_info)
+        stats_group.setLayout(stats_layout)
+        layout.addWidget(stats_group)
+        
         layout.addStretch()
         
         widget.setLayout(layout)
         return widget
-    
-    def open_console_version(self):
-        """Open console version in terminal"""
-        import subprocess
-        script_dir = Path(self.script_dir)
-        wrapper_script = script_dir / "run-update.sh"
-        
-        try:
-            if wrapper_script.exists():
-                subprocess.Popen(['konsole', '--hold', '-e', str(wrapper_script.absolute())],
-                               stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL)
-            else:
-                script_path = script_dir / "update-all.sh"
-                subprocess.Popen(['konsole', '--hold', '-e', 'bash', str(script_path.absolute())],
-                               stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL)
-        except Exception as e:
-            QMessageBox.warning(
-                self,
-                t("gui_error", "Error"),
-                t("gui_console_open_failed", "Failed to open console version:") + f"\n{str(e)}"
-            )
     
     def browse_directory(self, line_edit: QLineEdit):
         """Browse for directory"""
@@ -1072,6 +1228,31 @@ class ConfigDialog(QDialog):
         self.log_dir.setText(self.config.get("LOG_DIR", str(Path(self.script_dir) / "logs")))
         self.stats_dir.setText(self.config.get("STATS_DIR", str(Path(self.script_dir) / ".stats")))
         self.script_path.setText(self.config.get("SCRIPT_PATH", str(Path(self.script_dir) / "update-all.sh")))
+        
+        # Cleanup Settings
+        if hasattr(self, 'cleanup_aggressiveness'):
+            aggressiveness = self.config.get("CLEANUP_AGGRESSIVENESS", "moderate")
+            index_map = {"safe": 0, "moderate": 1, "aggressive": 2}
+            self.cleanup_aggressiveness.setCurrentIndex(index_map.get(aggressiveness, 1))
+        
+        if hasattr(self, 'cleanup_timing'):
+            timing = self.config.get("CLEANUP_TIMING", "after_updates")
+            index_map = {"after_updates": 0, "manual": 1, "never": 2}
+            self.cleanup_timing.setCurrentIndex(index_map.get(timing, 0))
+        
+        if hasattr(self, 'cleanup_orphans'):
+            self.cleanup_orphans.setChecked(self.config.get("CLEANUP_ORPHANS", "true") == "true")
+        
+        if hasattr(self, 'cleanup_cache'):
+            self.cleanup_cache.setChecked(self.config.get("CLEANUP_CACHE", "true") == "true")
+        
+        if hasattr(self, 'cleanup_temp'):
+            self.cleanup_temp.setChecked(self.config.get("CLEANUP_TEMP_FILES", "true") == "true")
+        
+        if hasattr(self, 'icon_cache_update'):
+            icon_cache = self.config.get("ICON_CACHE_UPDATE", "both")
+            index_map = {"both": 0, "after_shortcut": 1, "after_updates": 2, "manual": 3}
+            self.icon_cache_update.setCurrentIndex(index_map.get(icon_cache, 0))
         
         self.update_command_preview()
     
@@ -1181,6 +1362,28 @@ class ConfigDialog(QDialog):
         self.config["PACMAN_REFRESH"] = str(self.pacman_refresh.isChecked()).lower()
         self.config["PACMAN_UPGRADE"] = str(self.pacman_upgrade.isChecked()).lower()
         self.config["PACMAN_NOCONFIRM"] = str(self.pacman_noconfirm.isChecked()).lower()
+        
+        # Cleanup Settings
+        if hasattr(self, 'cleanup_aggressiveness'):
+            aggressiveness_map = {0: "safe", 1: "moderate", 2: "aggressive"}
+            self.config["CLEANUP_AGGRESSIVENESS"] = aggressiveness_map.get(self.cleanup_aggressiveness.currentIndex(), "moderate")
+        
+        if hasattr(self, 'cleanup_timing'):
+            timing_map = {0: "after_updates", 1: "manual", 2: "never"}
+            self.config["CLEANUP_TIMING"] = timing_map.get(self.cleanup_timing.currentIndex(), "after_updates")
+        
+        if hasattr(self, 'cleanup_orphans'):
+            self.config["CLEANUP_ORPHANS"] = str(self.cleanup_orphans.isChecked()).lower()
+        
+        if hasattr(self, 'cleanup_cache'):
+            self.config["CLEANUP_CACHE"] = str(self.cleanup_cache.isChecked()).lower()
+        
+        if hasattr(self, 'cleanup_temp'):
+            self.config["CLEANUP_TEMP_FILES"] = str(self.cleanup_temp.isChecked()).lower()
+        
+        if hasattr(self, 'icon_cache_update'):
+            icon_cache_map = {0: "both", 1: "after_shortcut", 2: "after_updates", 3: "manual"}
+            self.config["ICON_CACHE_UPDATE"] = icon_cache_map.get(self.icon_cache_update.currentIndex(), "both")
         
         return self.config_manager.save_config(self.config)
     
@@ -1526,9 +1729,41 @@ Categories=System;
         
         version_input_layout = QHBoxLayout()
         version_input_layout.addWidget(QLabel(t("gui_set_version", "Set Version") + ":"))
-        self.version_input = QLineEdit()
-        self.version_input.setPlaceholderText("1.0.15")
-        version_input_layout.addWidget(self.version_input)
+        
+        # ComboBox with last 3 versions as presets
+        self.version_combo = QComboBox()
+        self.version_combo.setEditable(True)
+        self.version_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        
+        # Get last 3 versions from git tags
+        try:
+            import subprocess
+            result = subprocess.run(['git', 'tag', '-l', 'v*'], capture_output=True, text=True, timeout=2, cwd=str(Path(self.script_dir).parent))
+            if result.returncode == 0:
+                tags = sorted(result.stdout.strip().split('\n'), key=lambda x: [int(i) for i in x.replace('v', '').split('.')])[-3:]
+                for tag in tags:
+                    version = tag.replace('v', '')
+                    self.version_combo.addItem(version)
+        except Exception:
+            pass
+        
+        # Set default to one version before current (if we can determine current version)
+        try:
+            root_dir = Path(self.script_dir).parent
+            version_file = root_dir / "VERSION"
+            if version_file.exists():
+                with open(version_file, 'r', encoding='utf-8') as f:
+                    current_version = f.read().strip()
+                    # Try to calculate previous version
+                    parts = [int(x) for x in current_version.split('.')]
+                    if parts[2] > 0:
+                        parts[2] -= 1
+                        prev_version = '.'.join(map(str, parts))
+                        self.version_combo.setCurrentText(prev_version)
+        except Exception:
+            pass
+        
+        version_input_layout.addWidget(self.version_combo)
         
         set_version_btn = QPushButton(t("gui_set_version", "Set Version"))
         set_version_btn.clicked.connect(self.set_version)
@@ -1688,7 +1923,8 @@ Categories=System;
     
     def set_version(self):
         """Set version in VERSION file"""
-        version_text = self.version_input.text().strip()
+        # Get version from combo box (which is editable)
+        version_text = self.version_combo.currentText().strip()
         
         if not version_text:
             QMessageBox.warning(
@@ -1736,7 +1972,7 @@ Categories=System;
             
             # Refresh display
             self.update_version_display()
-            self.version_input.clear()
+            self.version_combo.setCurrentText("")
         except Exception as e:
             QMessageBox.critical(
                 self,

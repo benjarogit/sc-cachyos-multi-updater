@@ -18,26 +18,28 @@ A simple one-click update tool for CachyOS that automatically updates system pac
 
 2. **Run setup (recommended for first-time installation):**
    ```bash
-   ./cachyos-update
+   cd cachyos-multi-updater
+   ./setup.sh
    ```
-   Select option `1` to run setup, which will guide you through configuration and create a desktop shortcut.
+   This will guide you through configuration and create a desktop shortcut.
 
 3. **Start updating:**
    ```bash
-   ./cachyos-update
+   ./cachyos-update-gui
    ```
-   Select option `2` to start updates.
+   Or use the desktop shortcut created during setup.
 
 ### Start Commands
 
-**Console version (with menu):**
-   ```bash
-./cachyos-update
-   ```
-
-**GUI version:**
+**GUI version (recommended):**
    ```bash
 ./cachyos-update-gui
+```
+
+**Direct script execution:**
+   ```bash
+cd cachyos-multi-updater
+./update-all.sh
 ```
 
 ### Basic Configuration
@@ -83,10 +85,31 @@ This script does all of that automatically, saving you time and ensuring everyth
 - ✅ **System Updates** - Updates CachyOS packages via pacman
 - ✅ **AUR Updates** - Updates AUR packages via yay/paru
 - ✅ **Cursor Editor** - Automatic download and update (version check before download)
+  - Supports multiple installation methods: pacman, AUR, Flatpak, AppImage, manual
+  - Hybrid version checking (package.json, GitHub API, HTTP HEAD)
+  - Automatic duplicate detection and prevention
 - ✅ **Flatpak Applications** - Updates all Flatpak apps and runtimes
 - ✅ **AdGuard Home** - Automatic update with configuration backup
-- ✅ **Automatic Cleanup** - Removes old packages, caches, and temporary files
-- ✅ **GUI Version** - Modern Qt-based graphical interface with real-time progress, secure password management, log viewer, and comprehensive settings dialog
+  - Supports multiple installation methods: pacman, AUR, Docker, manual
+  - Automatic backup management (configurable retention)
+  - Docker container update support
+- ✅ **Multi-Distribution Support** - Works on Arch, Debian, Fedora, openSUSE
+  - Automatic distribution detection
+  - Package manager abstraction (pacman, apt, dnf, zypper)
+  - Distribution-specific cleanup operations
+- ✅ **Enhanced Cleanup** - Comprehensive system cleanup
+  - Orphan package removal (distribution-specific)
+  - Package cache cleanup
+  - Temporary file removal
+  - Old backup cleanup (configurable)
+  - Icon cache updates (GTK, KDE, Desktop Database)
+  - Configurable aggressiveness and timing
+- ✅ **GUI Version** - Modern Qt-based graphical interface
+  - Real-time progress tracking
+  - Structured Update Infos panel
+  - Secure password management
+  - Log viewer
+  - Comprehensive settings dialog with cleanup configuration
 - ✅ **Interactive Mode** - Choose what to update before running
 - ✅ **Dry-Run Mode** - Preview changes without making them
 - ✅ **Statistics** - Track update history and success rates
@@ -98,14 +121,16 @@ This script does all of that automatically, saving you time and ensuring everyth
 ## 📋 Requirements
 
 ### Required:
-- **CachyOS or Arch Linux**
+- **Linux Distribution** (Arch/CachyOS, Debian/Ubuntu, Fedora/RHEL, openSUSE)
 - **sudo privileges**
 - **Internet connection**
 
 ### Optional:
-- **AUR Helper** (yay or paru) - for AUR package updates
-- **Cursor Editor** - for Cursor updates
-- **AdGuard Home** - for AdGuard updates (must be in `~/AdGuardHome`)
+- **AUR Helper** (yay or paru) - for AUR package updates (Arch-based only)
+- **Cursor Editor** - for Cursor updates (supports multiple installation methods)
+- **AdGuard Home** - for AdGuard updates (supports pacman, AUR, Docker, manual installation)
+- **Docker** - for Docker-based AdGuard updates
+- **Flatpak** - for Flatpak application updates
 - **PyQt6** - for GUI version (`pip3 install PyQt6`)
 
 ---
@@ -130,13 +155,14 @@ cd sc-cachyos-multi-updater
 The easiest way to get started:
 
    ```bash
-./cachyos-update
-```
+   cd cachyos-multi-updater
+   ./setup.sh
+   ```
 
-Select option `1` to run the setup script, which will:
+This will:
 - Guide you through configuration
 - Create a desktop shortcut (optional)
-- Start the update script automatically
+- Help you get started with the GUI
 
 **Alternative: Manual setup**
 ```bash
@@ -159,19 +185,18 @@ See [Configuration](#-configuration) section below for details.
 
 ## 💻 How to use it
 
-### Console Version
+### GUI Version (Recommended)
 
-**Start with menu:**
+**Start GUI:**
    ```bash
-./cachyos-update
+./cachyos-update-gui
 ```
 
-This shows a menu with options:
-1. Setup durchführen (First-time setup)
-2. Updates starten (Start updates)
-3. Beenden (Exit)
+Or use the desktop shortcut created during setup.
 
-**Direct script execution:**
+### Direct Script Execution
+
+**Run update script directly:**
 ```bash
 cd cachyos-multi-updater
 ./update-all.sh
@@ -300,6 +325,33 @@ The script can be customized using `cachyos-multi-updater/config.conf`. Copy fro
 
 ### Configuration Options
 
+#### Cleanup Configuration
+
+The following options control system cleanup behavior:
+
+- `CLEANUP_AGGRESSIVENESS` - Cleanup aggressiveness level
+  - `safe` - Only obvious unused files
+  - `moderate` - Includes old caches (default)
+  - `aggressive` - All caches, temp files, old backups
+
+- `CLEANUP_TIMING` - When to perform cleanup
+  - `after_updates` - After each update (default)
+  - `manual` - Only manually
+  - `never` - Never perform cleanup
+
+- `CLEANUP_ORPHANS` - Remove orphan packages (default: `true`)
+- `CLEANUP_CACHE` - Clean package cache (default: `true`)
+- `CLEANUP_TEMP_FILES` - Remove temporary files (default: `true`)
+- `CLEANUP_OLD_BACKUPS` - Clean old backups (default: `true`)
+- `ADGUARD_BACKUP_KEEP_COUNT` - Number of AdGuard backups to keep (default: `3`)
+- `ICON_CACHE_UPDATE` - When to update icon caches
+  - `both` - After shortcuts and updates (default)
+  - `after_shortcut` - After creating shortcuts
+  - `after_updates` - After updates
+  - `manual` - Manual only
+
+#### Original Configuration Options
+
 | Option | Values | Default | Description |
 |--------|--------|---------|-------------|
 | `ENABLE_SYSTEM_UPDATE` | `true`/`false` | `true` | Enable system package updates |
@@ -365,9 +417,9 @@ rm cachyos-multi-updater/.update-all.lock
 
 **Solution:** Make it executable:
    ```bash
-chmod +x cachyos-update
 chmod +x cachyos-update-gui
 chmod +x cachyos-multi-updater/update-all.sh
+chmod +x cachyos-multi-updater/setup.sh
 ```
 
 #### "Command not found" for yay/paru

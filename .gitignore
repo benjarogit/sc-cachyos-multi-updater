@@ -79,6 +79,13 @@ IMPROVEMENTS.md
 *.pyo
 __pycache__
 
+# Best Practices documentation (internal)
+**/BEST_PRACTICES_*.md
+**/DIALOG_BEST_PRACTICES.md
+
+# PyDracula (removed, not used)
+**/pydracula/
+
 # Workspace files (IDE-specific)
 *.code-workspace
 *.code-workspace.backup

@@ -651,12 +651,29 @@ exec bash "{self.script_path}" {" ".join(cmd[2:]) if len(cmd) > 2 else ""}
             return
     
     def _on_stderr(self):
-        """Handle stderr output"""
-        self.logger.warning("Received stderr data")
+        """Handle stderr output
+        
+        Best Practice: Only log stderr if it contains actual errors, not just warnings
+        """
         if self.process:
             data = self.process.readAllStandardError().data().decode('utf-8', errors='ignore')
             for line in data.splitlines():
                 if line.strip():
+                    # Best Practice: Only log stderr as warning if it looks like an error
+                    # Many scripts write normal output to stderr (e.g., progress bars)
+                    line_lower = line.lower()
+                    is_error = any(keyword in line_lower for keyword in [
+                        'error', 'failed', 'fatal', 'cannot', 'unable', 'missing',
+                        'not found', 'permission denied', 'access denied'
+                    ])
+                    
+                    if is_error:
+                        self.logger.warning(f"Stderr (error): {line}")
+                    else:
+                        # Normal stderr output - just debug log it
+                        self.logger.debug(f"Stderr: {line}")
+                    
+                    # Always emit to output (user should see it)
                     self.output_received.emit(line)
                     # Also try to parse progress from stderr
                     self._parse_progress(line)

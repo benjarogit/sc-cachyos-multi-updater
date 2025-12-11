@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # ========== Version ==========
-readonly SCRIPT_VERSION="1.0.10"
+readonly SCRIPT_VERSION="1.0.19"
 readonly GITHUB_REPO="benjarogit/sc-cachyos-multi-updater"
 
 # ========== Exit-Codes ==========
@@ -197,6 +197,16 @@ source "$SCRIPT_DIR/lib/progress.sh"
 source "$SCRIPT_DIR/lib/interactive.sh"
 # shellcheck disable=SC1090 # Dynamische Pfade, werden zur Laufzeit bestimmt
 source "$SCRIPT_DIR/lib/pre-check.sh"
+# shellcheck disable=SC1090 # Dynamische Pfade, werden zur Laufzeit bestimmt
+source "$SCRIPT_DIR/lib/distro_detection.sh"
+# shellcheck disable=SC1090 # Dynamische Pfade, werden zur Laufzeit bestimmt
+source "$SCRIPT_DIR/lib/package_manager.sh"
+# shellcheck disable=SC1090 # Dynamische Pfade, werden zur Laufzeit bestimmt
+source "$SCRIPT_DIR/lib/backup_manager.sh"
+# shellcheck disable=SC1090 # Dynamische Pfade, werden zur Laufzeit bestimmt
+source "$SCRIPT_DIR/lib/cleanup.sh"
+# shellcheck disable=SC1090 # Dynamische Pfade, werden zur Laufzeit bestimmt
+source "$SCRIPT_DIR/lib/icon_cache.sh"
 # shellcheck disable=SC1090 # Dynamische Pfade, werden zur Laufzeit bestimmt
 source "$SCRIPT_DIR/lib/output.sh"
 # shellcheck disable=SC1090 # Dynamische Pfade, werden zur Laufzeit bestimmt
@@ -846,29 +856,262 @@ compare_versions() {
     fi
 }
 
+# ========== Hybrid Cursor Version Check ==========
+# Versucht verschiedene Methoden zur Versionsprüfung
+# Gibt zurück: Version oder "unknown"
+check_cursor_version_hybrid() {
+    local version=""
+    
+    # Methode 1: package.json (Primär - zuverlässigste Methode)
+    local package_json_paths=(
+        "/usr/share/cursor/resources/app/package.json"
+        "/opt/cursor/resources/app/package.json"
+        "/opt/Cursor/resources/app/package.json"
+        "$HOME/.local/share/cursor/resources/app/package.json"
+    )
+    
+    # Prüfe auch über CURSOR_PATH falls verfügbar
+    if command -v cursor >/dev/null 2>&1; then
+        local cursor_path
+        cursor_path=$(which cursor)
+        local cursor_dir
+        cursor_dir=$(dirname "$(readlink -f "$cursor_path")" 2>/dev/null || echo "")
+        if [ -n "$cursor_dir" ] && [ -f "$cursor_dir/resources/app/package.json" ]; then
+            package_json_paths=("$cursor_dir/resources/app/package.json" "${package_json_paths[@]}")
+        fi
+    fi
+    
+    for path in "${package_json_paths[@]}"; do
+        if [ -f "$path" ]; then
+            version=$(grep -oP '"version":\s*"\K[0-9.]+' "$path" 2>/dev/null | head -1 || echo "")
+            if [ -n "$version" ]; then
+                echo "$version"
+                return 0
+            fi
+        fi
+    done
+    
+    # Methode 2: GitHub Releases API (Fallback)
+    if [ -z "$version" ]; then
+        local gh_version
+        gh_version=$(curl -s "https://api.github.com/repos/getcursor/cursor/releases/latest" 2>/dev/null | grep -oP '"tag_name":\s*"v?\K[0-9.]+' | head -1 || echo "")
+        if [ -n "$gh_version" ]; then
+            echo "$gh_version"
+            return 0
+        fi
+    fi
+    
+    # Methode 3: HTTP HEAD Request (Fallback 2)
+    if [ -z "$version" ]; then
+        local http_version
+        http_version=$(curl -sI "https://downloader.cursor.sh/linux/deb/x64" 2>/dev/null | grep -i "location:" | grep -oP 'cursor[_-]?([0-9.]+)' | grep -oP '[0-9.]+' | head -1 || echo "")
+        if [ -n "$http_version" ]; then
+            echo "$http_version"
+            return 0
+        fi
+    fi
+    
+    echo "unknown"
+    return 1
+}
+
 # ========== Installationsmethode-Erkennung ==========
 detect_cursor_installation_method() {
-    # Gibt zurück: "pacman", "aur", oder "manual"
+    # Gibt zurück: "pacman", "aur", "flatpak", "appimage", oder "manual"
+    
+    # 1. Prüfe Pacman-Installation
     if pacman -Q cursor 2>/dev/null | grep -q cursor; then
         echo "pacman"
-    elif pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
-        echo "aur"
-    else
-        echo "manual"
+        return
     fi
+    
+    # 2. Prüfe AUR-Installation
+    if pacman -Q cursor-bin 2>/dev/null | grep -q cursor-bin; then
+        echo "aur"
+        return
+    fi
+    
+    # 3. Prüfe Flatpak-Installation
+    if detect_cursor_flatpak >/dev/null 2>&1; then
+        echo "flatpak"
+        return
+    fi
+    
+    # 4. Prüfe AppImage-Installation
+    if detect_cursor_appimage >/dev/null 2>&1; then
+        echo "appimage"
+        return
+    fi
+    
+    # 5. Prüfe manuelle Installation
+    echo "manual"
+}
+
+# ========== Detect Cursor Flatpak Installation ==========
+detect_cursor_flatpak() {
+    # Prüft ob Cursor über Flatpak installiert ist
+    # Gibt Flatpak-App-ID zurück, falls gefunden
+    
+    if ! command -v flatpak >/dev/null 2>&1; then
+        return 1
+    fi
+    
+    # Prüfe Flatpak-Liste
+    local flatpak_app
+    flatpak_app=$(flatpak list --app 2>/dev/null | grep -i cursor | head -1 | awk '{print $2}' || echo "")
+    
+    if [ -n "$flatpak_app" ]; then
+        echo "$flatpak_app"
+        return 0
+    fi
+    
+    # Prüfe ob com.cursor existiert
+    if flatpak info com.cursor >/dev/null 2>&1; then
+        echo "com.cursor"
+        return 0
+    fi
+    
+    # Prüfe Installations-Verzeichnis
+    if [ -d "$HOME/.local/share/flatpak/app/com.cursor" ] || [ -d "/var/lib/flatpak/app/com.cursor" ]; then
+        echo "com.cursor"
+        return 0
+    fi
+    
+    return 1
+}
+
+# ========== Detect Cursor AppImage Installation ==========
+detect_cursor_appimage() {
+    # Prüft ob Cursor als AppImage installiert ist
+    # Gibt AppImage-Pfad zurück, falls gefunden
+    
+    # Prüfe ob cursor-Binary eine AppImage ist
+    local cursor_path
+    cursor_path=$(which cursor 2>/dev/null || echo "")
+    
+    if [ -n "$cursor_path" ] && [ -f "$cursor_path" ]; then
+        # Prüfe ob es eine AppImage ist (enthält AppImage-Magic-Bytes oder .AppImage-Endung)
+        if file "$cursor_path" 2>/dev/null | grep -qi "appimage\|executable" || [[ "$cursor_path" == *.AppImage ]]; then
+            echo "$cursor_path"
+            return 0
+        fi
+    fi
+    
+    # Prüfe typische AppImage-Verzeichnisse
+    local appimage_paths=(
+        "$HOME/Applications/cursor.AppImage"
+        "$HOME/Apps/cursor.AppImage"
+        "$HOME/.local/bin/cursor.AppImage"
+        "$HOME/Applications/Cursor.AppImage"
+        "$HOME/Apps/Cursor.AppImage"
+    )
+    
+    for path in "${appimage_paths[@]}"; do
+        if [ -f "$path" ]; then
+            echo "$path"
+            return 0
+        fi
+    done
+    
+    # Prüfe .desktop Dateien für AppImage-Verweise
+    local desktop_files=(
+        "$HOME/.local/share/applications/cursor.desktop"
+        "$HOME/.local/share/applications/Cursor.desktop"
+    )
+    
+    for desktop_file in "${desktop_files[@]}"; do
+        if [ -f "$desktop_file" ]; then
+            local exec_line
+            exec_line=$(grep "^Exec=" "$desktop_file" 2>/dev/null | head -1 | cut -d'=' -f2- | awk '{print $1}' || echo "")
+            if [[ "$exec_line" == *.AppImage ]] && [ -f "$exec_line" ]; then
+                echo "$exec_line"
+                return 0
+            fi
+        fi
+    done
+    
+    return 1
 }
 
 detect_adguard_installation_method() {
-    # Gibt zurück: "pacman", "aur", oder "manual"
+    # Gibt zurück: "pacman", "aur", "docker", "manual", oder "not_installed"
+    
+    # 1. Prüfe Pacman-Installation
     if pacman -Q adguard-home 2>/dev/null | grep -q adguard-home; then
         echo "pacman"
-    elif pacman -Q adguard-home-bin 2>/dev/null | grep -q adguard-home-bin || pacman -Q adguardhome 2>/dev/null | grep -q adguardhome; then
-        echo "aur"
-    elif [[ -f "$HOME/AdGuardHome/AdGuardHome" ]]; then
-        echo "manual"
-    else
-        echo "not_installed"
+        return
     fi
+    
+    # 2. Prüfe AUR-Installation
+    if pacman -Q adguard-home-bin 2>/dev/null | grep -q adguard-home-bin || pacman -Q adguardhome 2>/dev/null | grep -q adguardhome; then
+        echo "aur"
+        return
+    fi
+    
+    # 3. Prüfe Docker-Installation
+    if detect_adguard_docker >/dev/null 2>&1; then
+        echo "docker"
+        return
+    fi
+    
+    # 4. Prüfe Systemd Service (kann mit jeder Installationsmethode verwendet werden)
+    if systemctl --user list-units --type=service 2>/dev/null | grep -qi adguard; then
+        # Wenn Service existiert, aber keine Paket-Installation, dann wahrscheinlich manual
+        if [[ -f "$HOME/AdGuardHome/AdGuardHome" ]]; then
+            echo "manual"
+            return
+        fi
+    fi
+    
+    # 5. Prüfe manuelle Installation
+    if [[ -f "$HOME/AdGuardHome/AdGuardHome" ]]; then
+        echo "manual"
+        return
+    fi
+    
+    echo "not_installed"
+}
+
+# ========== Detect AdGuard Docker Installation ==========
+detect_adguard_docker() {
+    # Prüft ob AdGuard über Docker installiert ist
+    # Gibt Container-Name zurück, falls gefunden
+    
+    if ! command -v docker >/dev/null 2>&1; then
+        return 1
+    fi
+    
+    # Prüfe laufende Container
+    local container
+    container=$(docker ps --format "{{.Names}}" 2>/dev/null | grep -i adguard | head -1)
+    if [ -n "$container" ]; then
+        echo "$container"
+        return 0
+    fi
+    
+    # Prüfe alle Container (auch gestoppte)
+    container=$(docker ps -a --format "{{.Names}}" 2>/dev/null | grep -i adguard | head -1)
+    if [ -n "$container" ]; then
+        echo "$container"
+        return 0
+    fi
+    
+    # Prüfe docker-compose Dateien in typischen Pfaden
+    local compose_paths=(
+        "$HOME/docker/adguard/docker-compose.yml"
+        "$HOME/.docker/adguard/docker-compose.yml"
+        "$HOME/AdGuardHome/docker-compose.yml"
+        "/opt/adguard/docker-compose.yml"
+    )
+    
+    for path in "${compose_paths[@]}"; do
+        if [[ -f "$path" ]] && grep -qi "adguard" "$path" 2>/dev/null; then
+            echo "docker-compose:${path}"
+            return 0
+        fi
+    done
+    
+    return 1
 }
 
 # ========== Cursor updaten ==========
@@ -912,6 +1155,29 @@ if [ "$UPDATE_CURSOR" = "true" ]; then
             show_cursor_pacman_managed "$CURSOR_PACMAN_VERSION"
             log_info "Cursor-Update übersprungen (wird über pacman verwaltet)"
             show_progress "$CURRENT_STEP" "$TOTAL_STEPS" "Cursor Editor Update" "⏭️"
+                ;;
+            "flatpak")
+                # Über Flatpak installiert → wird über Flatpak-Updates verwaltet
+                local flatpak_app
+                flatpak_app=$(detect_cursor_flatpak)
+                CURSOR_FLATPAK_VERSION=$(flatpak info "$flatpak_app" 2>/dev/null | grep "Version:" | awk '{print $2}' || echo "unknown")
+                log_info "$(t 'log_cursor_flatpak_detected') $flatpak_app (Version: $CURSOR_FLATPAK_VERSION)"
+                log_info "$(t 'log_cursor_update_method_flatpak')"
+                echo -e "${COLOR_WARNING}  ○ $(t 'managed_by_flatpak') (v$CURSOR_FLATPAK_VERSION)${COLOR_RESET}"
+                echo ""
+                log_info "Cursor-Update übersprungen (wird über Flatpak verwaltet)"
+                show_progress "$CURRENT_STEP" "$TOTAL_STEPS" "Cursor Editor Update" "⏭️"
+                ;;
+            "appimage")
+                # AppImage-Installation → manuelles Update erforderlich
+                local appimage_path
+                appimage_path=$(detect_cursor_appimage)
+                log_info "$(t 'log_cursor_appimage_detected') $appimage_path"
+                log_info "$(t 'log_cursor_update_method_appimage')"
+                echo -e "${COLOR_WARNING}  ○ $(t 'appimage_manual_update_required')${COLOR_RESET}"
+                echo ""
+                log_info "Cursor AppImage-Update übersprungen (manuelles Update erforderlich)"
+                show_progress "$CURRENT_STEP" "$TOTAL_STEPS" "Cursor Editor Update" "⏭️"
                 ;;
             "aur")
                 # Über AUR installiert → prüfe ob Updates im AUR verfügbar sind
@@ -1486,6 +1752,12 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
             "pacman"|"aur")
                 log_info "$(t 'log_dry_run_package_manager')"
                 ;;
+            "docker")
+                local docker_info
+                docker_info=$(detect_adguard_docker)
+                log_info "$(t 'log_dry_run_adguard_docker') $docker_info"
+                log_info "$(t 'log_dry_run_docker_update')"
+                ;;
             "manual")
                 if [[ -f "$HOME/AdGuardHome/AdGuardHome" ]]; then
                     current_version=$(cd "$HOME/AdGuardHome" && ./AdGuardHome --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "0.0.0")
@@ -1571,7 +1843,7 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
                             if [[ -f "$new_binary" ]]; then
                                 new_version=$("$new_binary" --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "0.0.0")
                                 if [ "$new_version" != "$current_version" ]; then
-                                    if cp "$new_binary" "$agh_dir/" 2>&1 | tee -a "$LOG_FILE"; then
+                                    if sudo cp "$new_binary" "$agh_dir/" 2>&1 | tee -a "$LOG_FILE"; then
                                         ADGUARD_UPDATED=true
                                         log_success "$(t 'adguard_updated') v$current_version → v$new_version"
                                         echo "✅ $(t 'adguard_updated') v$current_version → v$new_version"
@@ -1613,7 +1885,7 @@ if [ "$UPDATE_ADGUARD" = "true" ]; then
                         if [[ -f "$new_binary" ]]; then
                             new_version=$("$new_binary" --version 2>/dev/null | grep -oP 'v\K[0-9.]+' || echo "0.0.0")
                             if [ "$new_version" != "$current_version" ]; then
-                                if cp "$new_binary" "$agh_dir/" 2>&1 | tee -a "$LOG_FILE"; then
+                                if sudo cp "$new_binary" "$agh_dir/" 2>&1 | tee -a "$LOG_FILE"; then
                                     # shellcheck disable=SC2034  # Used externally by lib/summary.sh
                                     ADGUARD_UPDATED=true
                                     log_success "AdGuardHome updated: v$current_version → v$new_version"
@@ -1735,62 +2007,15 @@ if [ "$DRY_RUN" = "true" ]; then
     log_info "[DRY-RUN] Würde ausführen: flatpak uninstall --unused --noninteractive -y"
     log_info "[DRY-RUN] Würde verbleibende .deb Dateien und temporäre Verzeichnisse entfernen"
 else
-    log_info "$(t 'log_starting_cleanup')"
-    show_cleanup_start
+    # Verwende erweiterte Cleanup-Funktionen (Multi-Distro Support)
+    perform_cleanup
     
-    # Alte Paketversionen im Cache behalten (nur die letzten 3 Versionen)
-    log_info "$(t 'log_cleaning_package_cache')"
-    paccache -rk3 2>&1 | tee -a "$LOG_FILE" || log_warning "Paccache fehlgeschlagen"
-    
-    # Entferne alte/deinstallierte Pakete aus dem Cache
-    log_info "$(t 'log_removing_old_packages')"
-    if yes | sudo pacman -Sc --noconfirm 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "$(t 'log_package_cache_cleaned')"
-    else
-        log_warning "$(t 'log_package_cache_warnings')"
+    # Icon-Cache-Updates (wenn konfiguriert)
+    # WICHTIG: Kein 'local' im Hauptscript - nur in Funktionen!
+    icon_cache_timing="${ICON_CACHE_UPDATE:-both}"
+    if [ "$icon_cache_timing" = "after_updates" ] || [ "$icon_cache_timing" = "both" ]; then
+        update_icon_cache
     fi
-    
-    # Entferne verwaiste Pakete (Orphans)
-    orphans=$(pacman -Qtdq 2>/dev/null || true)
-    if [[ -n "$orphans" ]]; then
-        log_info "$(t 'log_removing_orphans')"
-        sudo pacman -Rns "$orphans" --noconfirm 2>&1 | tee -a "$LOG_FILE" || log_warning "$(t 'log_orphans_removal_failed')"
-    else
-        log_info "$(t 'log_no_orphans')"
-    fi
-    
-    # Flatpak-Cache bereinigen
-    if command -v flatpak >/dev/null 2>&1; then
-        log_info "$(t 'log_cleaning_flatpak_cache')"
-        if flatpak uninstall --unused --noninteractive -y 2>&1 | tee -a "$LOG_FILE"; then
-            log_success "$(t 'log_flatpak_cache_cleaned')"
-        else
-            log_warning "$(t 'log_flatpak_cache_warnings')"
-        fi
-    fi
-    
-    # Entferne verbleibende Cursor .deb Dateien im Script-Verzeichnis (falls vorhanden)
-    if find "$SCRIPT_DIR" -maxdepth 1 -name "cursor*.deb" -type f 2>/dev/null | grep -q .; then
-        log_info "$(t 'log_removing_cursor_deb')"
-        find "$SCRIPT_DIR" -maxdepth 1 -name "cursor*.deb" -type f -delete 2>/dev/null || true
-        log_success "$(t 'log_cursor_deb_removed')"
-    fi
-    
-    # Entferne verbleibende AdGuard temporäre Dateien
-    if find /tmp -maxdepth 1 -name "*adguard*" -o -name "*AdGuard*" -type d 2>/dev/null | grep -q .; then
-        log_info "$(t 'log_removing_adguard_temp')"
-        find /tmp -maxdepth 1 \( -name "*adguard*" -o -name "*AdGuard*" \) -type d -exec rm -rf {} + 2>/dev/null || true
-        log_success "$(t 'log_adguard_temp_removed')"
-    fi
-    
-    # Entferne verbleibende Cursor temporäre Verzeichnisse
-    if find /tmp -maxdepth 1 -name "*cursor*" -type d 2>/dev/null | grep -q .; then
-        log_info "$(t 'log_removing_cursor_temp')"
-        find /tmp -maxdepth 1 -name "*cursor*" -type d -exec rm -rf {} + 2>/dev/null || true
-        log_success "$(t 'log_cursor_temp_removed')"
-    fi
-
-    show_cleanup_result
 fi
 
 # ========== Zusammenfassung ==========
@@ -1884,7 +2109,7 @@ check_script_update() {
                 echo "   $(t 'tip_auto_update')"
             fi
         else
-            log_info "Lokale Version ist neuer als GitHub-Version (Entwicklung?)"
+            log_info "$(t 'log_local_version_newer') $SCRIPT_VERSION (GitHub: $LATEST_VERSION)"
             echo "ℹ️  $(t 'local_version') $SCRIPT_VERSION (GitHub: $LATEST_VERSION)"
         fi
     else
