@@ -35,7 +35,7 @@ fi
 
 # Fallback: Read from update-all.sh
 if [ -z "$VERSION" ] && [ -f "${UPDATE_SCRIPT}" ]; then
-    VERSION=$(grep -oP 'readonly SCRIPT_VERSION="\K[^"]+' "${UPDATE_SCRIPT}" || echo "")
+VERSION=$(grep -oP 'readonly SCRIPT_VERSION="\K[^"]+' "${UPDATE_SCRIPT}" || echo "")
 fi
 
 if [ -z "$VERSION" ]; then
@@ -160,7 +160,7 @@ else
     echo -e "${YELLOW}⚠ Konnte neueste GitHub-Version nicht ermitteln${NC}"
     # Bug 1 FIX: Save original IFS and restore it after parsing
     OLD_IFS="$IFS"
-    IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
+IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
     IFS="$OLD_IFS"
     # Bug 1 FIX: Validate that at least MAJOR is present BEFORE applying defaults
     # Check if version is empty or starts with dot (invalid format)
@@ -169,11 +169,11 @@ else
         exit 1
     fi
     # Apply defaults for missing MINOR and PATCH parts only
-    MAJOR="${VERSION_PARTS[0]}"
+MAJOR="${VERSION_PARTS[0]}"
     MINOR="${VERSION_PARTS[1]:-0}"
     PATCH="${VERSION_PARTS[2]:-0}"
-    PATCH=$((PATCH + 1))
-    SUGGESTED_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+PATCH=$((PATCH + 1))
+SUGGESTED_VERSION="${MAJOR}.${MINOR}.${PATCH}"
 fi
 
 echo -e "${CYAN}Vorgeschlagene Release-Version: ${SUGGESTED_VERSION}${NC}"

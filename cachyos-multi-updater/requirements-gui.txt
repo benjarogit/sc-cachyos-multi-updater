@@ -2,14 +2,21 @@
 # Install with: pip install -r requirements-gui.txt
 
 # Qt6 Python bindings (choose one)
-PyQt6>=6.6.0
-# Alternative: PySide6>=6.6.0
+PyQt6>=6.7.0
+# Alternative: PySide6>=6.7.0
 
 # Optional: For Font Awesome icons (if not available, falls back to emoji)
 # qtawesome>=1.2.0
 
 # Optional: For secure password storage (recommended)
 # Uses system keyring (most secure) or Fernet encryption (fallback)
-python-keyring>=24.0.0
-# Alternative: cryptography>=41.0.0 (if keyring not available)
+python-keyring>=25.0.0
+# Alternative: cryptography>=43.0.0 (if keyring not available)
+
+# HTTP requests library (replaces urllib for security)
+requests>=2.31.0
+
+# Testing dependencies
+pytest>=7.4.0
+pytest-qt>=4.2.0
 

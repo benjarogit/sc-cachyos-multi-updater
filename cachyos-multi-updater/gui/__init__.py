@@ -2,5 +2,7 @@
 CachyOS Multi-Updater GUI Package
 """
 
-__version__ = "1.0.6"
+# Re-export main entry point for backward compatibility
+from .core.main import main
 
+__all__ = ["main"]

@@ -1,14 +1,58 @@
+[![Version](https://img.shields.io/badge/version-2.3.0-blue)](https://github.com/benjarogit/sc-cachyos-multi-updater/releases)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue)](https://www.python.org)
+[![PyQt6](https://img.shields.io/pypi/pyversions/PyQt6)](https://pypi.org/project/PyQt6/)
+[![Lizenz](https://img.shields.io/badge/Lizenz-MIT-green)](LICENSE)
+[![Downloads](https://img.shields.io/github/downloads/benjarogit/sc-cachyos-multi-updater/total)](https://github.com/benjarogit/sc-cachyos-multi-updater/releases)
+
 # CachyOS Multi-Updater
+
+Ein modernes PyQt6-Tool, mit dem du unter CachyOS / Arch Linux **alle Paketquellen gleichzeitig** aktualisieren kannst – pacman, flatpak, snap, aura, yay, pikaur, paru und mehr – mit nur einem Klick.
 
 > **Sprache / Language:** [🇩🇪 Deutsch](README.de.md) | [🇬🇧 English](README.md)
 
-Ein einfaches One-Click-Update-Tool für CachyOS, das automatisch System-Pakete, AUR-Pakete, den Cursor Editor, Flatpak-Anwendungen und AdGuard Home aktualisiert.
+## Features
 
----
+- ✅ **Gleichzeitige Updates** - Alle unterstützten Paket-Manager auf einmal aktualisieren
+- ✅ **Live-Log-Ansicht** - Echtzeit-Ausgabe mit farbiger Hervorhebung
+- ✅ **Dark / Light / Auto-Theme** - Passt sich automatisch deinem System-Theme an
+- ✅ **Vollständige Lokalisierung** - Komplette Deutsch-/Englisch-Übersetzung
+- ✅ **Konfigurationsdialog** - Umfassende Einstellungen mit Validierung
+- ✅ **Automatische Versionsprüfung** - Prüft bei Start auf Updates
+- ✅ **Sicherer Bash-Wrapper** - Verwendet shlex.quote, keine unsicheren shell=True Aufrufe
+- ✅ **Type Hints** - 100% typisierter Code für bessere Wartbarkeit
+- ✅ **Umfassende Tests** - 44+ Unit-Tests mit 13% Coverage
+- ✅ **Moderne Architektur** - Sauberer Code, Best Practices, Performance-Optimierungen
 
-## 🚀 Quick Start
+## Screenshots
 
-### Installation (3 Schritte)
+![Hero](screenshots/hero.png)
+
+<details>
+<summary>Weitere Screenshots (klick zum Aufklappen)</summary>
+
+![Thumb 1](screenshots/thumb-1.png) ![Thumb 2](screenshots/thumb-2.png) ![Thumb 3](screenshots/thumb-3.png)  
+![Thumb 4](screenshots/thumb-4.png) ![Thumb 5](screenshots/thumb-5.png) ![Thumb 6](screenshots/thumb-6.png)
+
+</details>
+
+## Systemvoraussetzungen
+
+- CachyOS oder jede Arch-Linux-Distribution
+- Python 3.11 oder neuer
+- PyQt6 ≥ 6.7
+- sudo-Berechtigungen für Paket-Manager
+
+## Installation
+
+```bash
+git clone https://github.com/benjarogit/sc-cachyos-multi-updater.git
+cd sc-cachyos-multi-updater
+python -m venv venv
+source venv/bin/activate
+pip install -r cachyos-multi-updater/requirements-gui.txt
+```
+
+### Quick Start
 
 1. **Repository klonen:**
    ```bash
@@ -29,305 +73,17 @@ Ein einfaches One-Click-Update-Tool für CachyOS, das automatisch System-Pakete,
    ```
    Oder verwende die während des Setups erstellte Desktop-Verknüpfung.
 
-### Start-Kommandos
+## Konfiguration
 
-**GUI-Version (empfohlen):**
-```bash
-./cachyos-update-gui
-```
+Das Tool kann über `cachyos-multi-updater/config.conf` angepasst werden. Kopiere von `config.conf.example` und bearbeite nach Bedarf.
 
-**Direkte Script-Ausführung:**
-```bash
-cd cachyos-multi-updater
-./update-all.sh
-```
+### Umgebungsvariablen
 
-### Grundlegende Konfiguration
+- `SCRIPT_DIR` - Pfad zum Script-Verzeichnis (falls GUI update-all.sh nicht findet)
+- `GUI_LANGUAGE` - Sprache überschreiben (`de`, `en`, oder `auto`)
+- `GUI_THEME` - Theme überschreiben (`light`, `dark`, oder `auto`)
 
-Erstelle `cachyos-multi-updater/config.conf` aus dem Beispiel:
-```bash
-cp cachyos-multi-updater/config.conf.example cachyos-multi-updater/config.conf
-```
-
-Bearbeite um Komponenten zu aktivieren/deaktivieren:
-```ini
-ENABLE_SYSTEM_UPDATE=true
-ENABLE_AUR_UPDATE=true
-ENABLE_CURSOR_UPDATE=true
-ENABLE_FLATPAK_UPDATE=true
-ENABLE_ADGUARD_UPDATE=true
-```
-
----
-
-## 🤔 Was ist das?
-
-**CachyOS Multi-Updater** ist ein Script, das dir hilft, dein CachyOS Linux-System auf dem neuesten Stand zu halten. Anstatt verschiedene Teile deines Systems manuell nacheinander zu aktualisieren, macht dieses Script alles automatisch in einem Durchgang.
-
-**Verfügbar in zwei Versionen:**
-- **Console-Version** - Kommandozeilen-Interface mit Menü-System
-- **GUI-Version** - Moderne Qt-basierte grafische Oberfläche (empfohlen für Anfänger)
-
-### Was ist CachyOS?
-
-CachyOS ist ein Linux-Betriebssystem, das auf Arch Linux basiert. Es ist darauf ausgelegt, schnell und für Performance optimiert zu sein. Wie jedes Betriebssystem benötigt es regelmäßige Updates, um Sicherheitskorrekturen, neue Features und Fehlerbehebungen zu erhalten.
-
-### Warum brauche ich das?
-
-Normalerweise erfordert das Aktualisieren eines Linux-Systems das Ausführen mehrerer Befehle:
-- System-Pakete aktualisieren
-- AUR-Pakete aktualisieren (Community-erstellte Software)
-- Anwendungen wie den Cursor Editor aktualisieren
-- Dienste wie AdGuard Home aktualisieren
-
-Dieses Script macht all das automatisch und spart dir Zeit, während es sicherstellt, dass alles aktuell bleibt.
-
----
-
-## ✨ Features
-
-- ✅ **System-Updates** - Aktualisiert CachyOS-Pakete via pacman
-- ✅ **AUR-Updates** - Aktualisiert AUR-Pakete via yay/paru
-- ✅ **Cursor Editor** - Automatischer Download und Update (Versionsprüfung vor Download)
-  - Unterstützt mehrere Installationsmethoden: pacman, AUR, Flatpak, AppImage, manuell
-  - Hybrid-Versionsprüfung (package.json, GitHub API, HTTP HEAD)
-  - Automatische Duplikat-Erkennung und -Verhinderung
-- ✅ **Flatpak-Anwendungen** - Aktualisiert alle Flatpak-Apps und Laufzeiten
-- ✅ **AdGuard Home** - Automatisches Update mit Konfigurations-Backup
-  - Unterstützt mehrere Installationsmethoden: pacman, AUR, Docker, manuell
-  - Automatisches Backup-Management (konfigurierbare Aufbewahrung)
-  - Docker-Container-Update-Unterstützung
-- ✅ **Multi-Distribution-Support** - Funktioniert auf Arch, Debian, Fedora, openSUSE
-  - Automatische Distribution-Erkennung
-  - Paketmanager-Abstraktion (pacman, apt, dnf, zypper)
-  - Distribution-spezifische Bereinigungsoperationen
-- ✅ **Erweiterte Bereinigung** - Umfassende Systembereinigung
-  - Verwaiste Pakete entfernen (distribution-spezifisch)
-  - Paket-Cache-Bereinigung
-  - Temporäre Dateien entfernen
-  - Alte Backups bereinigen (konfigurierbar)
-  - Icon-Cache-Updates (GTK, KDE, Desktop-Datenbank)
-  - Konfigurierbare Aggressivität und Zeitpunkt
-- ✅ **GUI-Version** - Moderne Qt-basierte grafische Oberfläche
-  - Echtzeit-Fortschrittsanzeige
-  - Strukturiertes Update-Infos-Panel
-  - Sichere Passwort-Verwaltung
-  - Log-Viewer
-  - Umfassender Einstellungsdialog mit Cleanup-Konfiguration
-- ✅ **Interaktiver Modus** - Wähle was aktualisiert werden soll
-- ✅ **Dry-Run-Modus** - Vorschau der Änderungen ohne sie durchzuführen
-- ✅ **Statistiken** - Verfolge Update-Historie und Erfolgsraten
-- ✅ **Logging** - Detaillierte Logs für Fehlerbehebung
-- ✅ **Benachrichtigungen** - Desktop-Benachrichtigungen bei Update-Abschluss
-
----
-
-## 📋 Voraussetzungen
-
-### Erforderlich:
-- **Linux-Distribution** (Arch/CachyOS, Debian/Ubuntu, Fedora/RHEL, openSUSE)
-- **sudo-Berechtigungen**
-- **Internetverbindung**
-
-### Optional:
-- **AUR-Helper** (yay oder paru) - für AUR-Paket-Updates (nur Arch-basiert)
-- **Cursor Editor** - für Cursor-Updates (unterstützt mehrere Installationsmethoden)
-- **AdGuard Home** - für AdGuard-Updates (unterstützt pacman, AUR, Docker, manuelle Installation)
-- **Docker** - für Docker-basierte AdGuard-Updates
-- **Flatpak** - für Flatpak-Anwendungs-Updates
-- **PyQt6** - für GUI-Version (`pip3 install PyQt6`)
-
----
-
-## 🔧 Installationsanleitung
-
-### Schritt 1: Download
-
-**Option A: Mit Git (empfohlen)**
-```bash
-git clone https://github.com/SunnyCueq/cachyos-multi-updater.git
-cd cachyos-multi-updater
-```
-
-**Option B: Als ZIP herunterladen**
-1. Gehe zu https://github.com/benjarogit/sc-cachyos-multi-updater
-2. Klicke auf "Code" → "Download ZIP"
-3. Entpacke und navigiere zum Ordner
-
-### Schritt 2: Setup ausführen
-
-Der einfachste Weg zum Starten:
-
-```bash
-./cachyos-update
-```
-
-Wähle Option `1` um das Setup-Script auszuführen, das:
-- Dich durch die Konfiguration führt
-- Eine Desktop-Verknüpfung erstellt (optional)
-- Das Update-Script automatisch startet
-
-**Alternative: Manuelle Einrichtung**
-```bash
-cd cachyos-multi-updater
-chmod +x update-all.sh
-./update-all.sh --help  # Teste ob es funktioniert
-```
-
-### Schritt 3: Konfigurieren (optional)
-
-Erstelle Konfigurationsdatei:
-```bash
-cp cachyos-multi-updater/config.conf.example cachyos-multi-updater/config.conf
-nano cachyos-multi-updater/config.conf
-```
-
-Siehe [Konfiguration](#-konfiguration) Abschnitt unten für Details.
-
----
-
-## 💻 Wie man es verwendet
-
-### Console-Version
-
-**Mit Menü starten:**
-```bash
-./cachyos-update
-```
-
-Zeigt ein Menü mit Optionen:
-1. Setup durchführen (Erstinstallation)
-2. Updates starten (Updates starten)
-3. Beenden (Beenden)
-
-**Direkte Script-Ausführung:**
-```bash
-cd cachyos-multi-updater
-./update-all.sh
-```
-
-**Befehlszeilen-Optionen:**
-
-| Option | Beschreibung |
-|--------|-------------|
-| `./update-all.sh` | Standard-Update (alle Komponenten) |
-| `--only-system` | Nur System-Pakete |
-| `--only-aur` | Nur AUR-Pakete |
-| `--only-cursor` | Nur Cursor Editor |
-| `--only-flatpak` | Nur Flatpak-Anwendungen |
-| `--only-adguard` | Nur AdGuard Home |
-| `--dry-run` | Vorschau ohne Änderungen |
-| `--interactive` oder `-i` | Wähle was aktualisiert werden soll |
-| `--stats` | Zeige Update-Statistiken |
-| `--version` oder `-v` | Zeige Version |
-| `--help` oder `-h` | Zeige Hilfe |
-
-**Beispiele:**
-```bash
-# Vorschau was aktualisiert würde
-./update-all.sh --dry-run
-
-# Nur System-Pakete aktualisieren
-./update-all.sh --only-system
-
-# Interaktiver Modus
-./update-all.sh --interactive
-
-# Statistiken anzeigen
-./update-all.sh --stats
-```
-
-### GUI-Version
-
-**GUI starten:**
-```bash
-./cachyos-update-gui
-```
-
-Die GUI bietet eine moderne, benutzerfreundliche Oberfläche zur Verwaltung von System-Updates ohne Kommandozeile.
-
-#### GUI-Features
-
-**Hauptfenster:**
-- **Komponenten-Auswahl** - Checkboxen zum Aktivieren/Deaktivieren jedes Update-Typs (System, AUR, Cursor, AdGuard, Flatpak)
-- **Echtzeit-Ausgabe** - Farbige Konsolen-Ausgabe mit Update-Fortschritt:
-  - 🟢 Grün: Erfolgsmeldungen
-  - 🔴 Rot: Fehlermeldungen
-  - 🟠 Orange: Warnmeldungen
-  - ⚫ Schwarz: Normale Ausgabe
-- **Fortschrittsbalken** - Visueller Fortschrittsindikator (0-100%)
-- **Status-Anzeige** - Aktuelle Statusmeldung und Update-Informationen
-- **Versionsprüfung** - Automatische Prüfung auf Script-Updates (zeigt an, ob neuere Version verfügbar)
-- **Theme-Unterstützung** - Helles und dunkles Theme (folgt System-Theme)
-
-**Buttons:**
-- **Updates prüfen** - Führt Update-Script im Dry-Run-Modus aus (nur Vorschau, keine Änderungen)
-- **Updates starten** - Startet den tatsächlichen Update-Prozess
-- **Stoppen** - Stoppt einen laufenden Update (falls möglich)
-- **Einstellungen** - Öffnet umfassenden Einstellungs-Dialog
-- **Logs anzeigen** - Öffnet Log-Viewer zum Durchsuchen von Update-Logs
-
-**Einstellungs-Dialog (6 Tabs):**
-
-1. **Update-Komponenten** - Jede Update-Komponente aktivieren/deaktivieren
-2. **Allgemeine Einstellungen** - Log-Dateien, Wiederholungen, Benachrichtigungen, Farben, Dry-Run-Modus
-3. **Logs** - Log-Dateien direkt in der GUI anzeigen und durchsuchen
-4. **System** - Script-Pfade, Verzeichnisse, Spracheinstellungen
-5. **Erweiterte Einstellungen** - GitHub-Repository, Pfade, Verzeichnisse, GUI-Sprache
-6. **Info** - Versionsinformationen, Links zu GitHub, Changelog
-
-**Zusätzliche Features:**
-- **Sichere Passwort-Verwaltung** - Verschlüsselte Sudo-Passwort-Speicherung (System-Keyring oder Fernet-Verschlüsselung)
-- **Desktop-Verknüpfung erstellen** - Desktop-Verknüpfungen direkt aus der GUI erstellen
-- **Update-Statistiken** - Update-Historie und Erfolgsraten anzeigen
-- **Log-Viewer** - Log-Dateien mit korrekter Formatierung durchsuchen und anzeigen
-- **Toast-Benachrichtigungen** - Desktop-Benachrichtigungen bei Update-Abschluss
-- **Syntax-Hervorhebung** - Farbige Ausgabe im Konsolen-Bereich für bessere Lesbarkeit
-- **Animationen** - Sanfte UI-Animationen und Übergänge
-- **Internationalisierung** - Mehrsprachige Unterstützung (Deutsch/Englisch, automatisch erkannt)
-
-**Voraussetzungen:**
-- PyQt6 muss installiert sein: `pip3 install PyQt6`
-- Oder alle Abhängigkeiten installieren: `pip3 install -r cachyos-multi-updater/requirements-gui.txt`
-
-**GUI-Installation:**
-```bash
-# PyQt6 installieren
-pip3 install PyQt6
-
-# Oder alle GUI-Abhängigkeiten installieren
-pip3 install -r cachyos-multi-updater/requirements-gui.txt
-
-# Optional: Für sichere Passwort-Speicherung installieren
-pip3 install keyring cryptography
-```
-
-**GUI-Verwendung:**
-1. GUI starten: `./cachyos-update-gui`
-2. Auswählen welche Komponenten aktualisiert werden sollen (Checkboxen)
-3. "Updates prüfen" klicken um Änderungen vorzuschauen (Dry-Run)
-4. "Updates starten" klicken um den Update-Prozess zu beginnen
-5. Fortschritt in Echtzeit überwachen
-6. Logs anzeigen falls nötig
-7. Einstellungen über den Einstellungen-Button konfigurieren
-
-**GUI-Vorteile:**
-- ✅ Keine Kommandozeilen-Kenntnisse erforderlich
-- ✅ Visuelles Feedback und Fortschrittsanzeige
-- ✅ Einfache Konfiguration über Einstellungs-Dialog
-- ✅ Sichere Passwort-Verwaltung
-- ✅ Echtzeit-Update-Überwachung
-- ✅ Log-Anzeige ohne Terminal
-- ✅ Desktop-Benachrichtigungen
-- ✅ Moderne, intuitive Oberfläche
-
----
-
-## ⚙️ Konfiguration
-
-Das Script kann über `cachyos-multi-updater/config.conf` angepasst werden. Kopiere von `config.conf.example` und bearbeite nach Bedarf.
-
-### Konfigurations-Optionen
+### Konfigurationsdatei-Optionen
 
 | Option | Werte | Standard | Beschreibung |
 |--------|-------|---------|-------------|
@@ -341,7 +97,8 @@ Das Script kann über `cachyos-multi-updater/config.conf` angepasst werden. Kopi
 | `DRY_RUN` | `true`/`false` | `false` | Immer im Vorschau-Modus laufen |
 | `MAX_LOG_FILES` | Zahl | `10` | Anzahl der zu behaltenden Log-Dateien |
 | `DOWNLOAD_RETRIES` | Zahl | `3` | Fehlgeschlagene Downloads N-mal wiederholen |
-| `ENABLE_AUTO_UPDATE` | `true`/`false` | `false` | Automatische Script-Updates aktivieren |
+| `GUI_LANGUAGE` | `auto`/`de`/`en` | `auto` | GUI-Sprache |
+| `GUI_THEME` | `auto`/`light`/`dark` | `auto` | GUI-Theme |
 
 ### Beispiel-Konfiguration
 
@@ -364,84 +121,99 @@ DRY_RUN=false
 
 # Erscheinungsbild
 ENABLE_COLORS=true
+GUI_THEME=auto
+GUI_LANGUAGE=auto
 
 # Downloads
 DOWNLOAD_RETRIES=3
 ```
 
-### Konfigurations-Priorität
+## Verwendung
 
-1. **Befehlszeilen-Optionen** (höchste Priorität)
-2. **Konfigurationsdatei** (`config.conf`)
-3. **Standardwerte** (niedrigste Priorität)
+### GUI-Version (Empfohlen)
 
----
+**GUI starten:**
+```bash
+./cachyos-update-gui
+```
 
-## 🐛 Fehlerbehebung
+Oder verwende die während des Setups erstellte Desktop-Verknüpfung.
+
+**GUI-Features:**
+- Komponenten-Auswahl per Checkboxen
+- Echtzeit-Ausgabe mit Farben
+- Fortschrittsbalken (0-100%)
+- Einstellungsdialog mit 6 Tabs
+- Log-Viewer
+- Sichere Passwort-Verwaltung
+- Toast-Benachrichtigungen
+
+### Kommandozeilen-Version
+
+**Update-Script direkt ausführen:**
+```bash
+cd cachyos-multi-updater
+./update-all.sh
+```
+
+**Befehlszeilen-Optionen:**
+
+| Option | Beschreibung |
+|--------|-------------|
+| `./update-all.sh` | Standard-Update (alle Komponenten) |
+| `--only-system` | Nur System-Pakete |
+| `--only-aur` | Nur AUR-Pakete |
+| `--only-cursor` | Nur Cursor Editor |
+| `--only-flatpak` | Nur Flatpak-Anwendungen |
+| `--only-adguard` | Nur AdGuard Home |
+| `--dry-run` | Vorschau ohne Änderungen |
+| `--interactive` oder `-i` | Wähle was aktualisiert werden soll |
+| `--stats` | Zeige Update-Statistiken |
+| `--version` oder `-v` | Zeige Version |
+| `--help` oder `-h` | Zeige Hilfe |
+
+**Beispiele:**
+
+```bash
+# Vorschau was aktualisiert würde
+./update-all.sh --dry-run
+
+# Nur System-Pakete aktualisieren
+./update-all.sh --only-system
+
+# Interaktiver Modus
+./update-all.sh --interactive
+
+# Statistiken anzeigen
+./update-all.sh --stats
+```
+
+## Fehlerbehebung
 
 ### Häufige Probleme
 
-#### Script sagt "Update läuft bereits!" (Update läuft bereits)
+#### Script sagt "Update läuft bereits"
 
 **Lösung:** Lösche die Lock-Datei:
 ```bash
 rm cachyos-multi-updater/.update-all.lock
 ```
 
-**Warum:** Das Script könnte abgestürzt oder unterbrochen worden sein und die Lock-Datei zurückgelassen haben.
-
 #### "Permission denied" beim Ausführen des Scripts
 
 **Lösung:** Mache es ausführbar:
 ```bash
-chmod +x cachyos-update
 chmod +x cachyos-update-gui
 chmod +x cachyos-multi-updater/update-all.sh
+chmod +x cachyos-multi-updater/setup.sh
 ```
-
-#### "Command not found" für yay/paru
-
-**Lösung:** Installiere einen AUR-Helper oder deaktiviere AUR-Updates:
-```bash
-# yay installieren
-git clone https://aur.archlinux.org/yay.git
-cd yay
-makepkg -si
-
-# Oder in config.conf deaktivieren
-ENABLE_AUR_UPDATE=false
-```
-
-#### Cursor wird nicht aktualisiert
-
-**Prüfen:**
-1. Cursor installiert? `which cursor`
-2. Internetverbindung? `ping api2.cursor.sh`
-3. Logs prüfen: `grep -i cursor cachyos-multi-updater/logs/update-*.log`
-4. Deaktivieren falls nicht benötigt: `ENABLE_CURSOR_UPDATE=false`
-
-#### AdGuard Home wird nicht aktualisiert
-
-**Prüfen:**
-1. Installiert in `~/AdGuardHome`? `ls -l ~/AdGuardHome/AdGuardHome`
-2. Logs prüfen: `grep -i adguard cachyos-multi-updater/logs/update-*.log`
-3. Deaktivieren falls nicht benötigt: `ENABLE_ADGUARD_UPDATE=false`
-
-#### Script läuft aber nichts passiert
-
-**Mögliche Ursachen:**
-1. Alles ist bereits aktuell (normal!)
-2. Dry-Run-Modus aktiviert (`DRY_RUN=true` in config)
-3. Alle Updates in config deaktiviert
-4. Logs prüfen: `cat cachyos-multi-updater/logs/$(ls -t cachyos-multi-updater/logs/ | head -1)`
 
 #### GUI startet nicht
 
 **Prüfen:**
 1. PyQt6 installiert? `python3 -c "from PyQt6.QtWidgets import QApplication"`
-2. Python-Version 3.8+? `python3 --version`
+2. Python-Version 3.11+? `python3 --version`
 3. Abhängigkeiten installiert? `pip3 install -r cachyos-multi-updater/requirements-gui.txt`
-4. Script-Verzeichnis korrekt? Prüfe dass `cachyos-multi-updater/update-all.sh` existiert
 
 **Lösung:**
 ```bash
@@ -459,19 +231,6 @@ pip3 install -r cachyos-multi-updater/requirements-gui.txt
 2. Oder setze Environment-Variable: `export SCRIPT_DIR=/path/to/cachyos-multi-updater`
 3. Prüfe dass `cachyos-multi-updater/update-all.sh` existiert
 
-#### GUI Passwort-Dialog funktioniert nicht
-
-**Prüfen:**
-1. Keyring installiert? `pip3 install keyring cryptography`
-2. System-Keyring verfügbar? (normalerweise automatisch)
-3. Versuche Passwort jedes Mal manuell einzugeben (Passwort-Speicherung deaktivieren)
-
-**Lösung:**
-```bash
-# Passwort-Speicher-Abhängigkeiten installieren
-pip3 install keyring cryptography
-```
-
 ### Hilfe erhalten
 
 1. **Logs zuerst prüfen** - Die meisten Probleme sind in `cachyos-multi-updater/logs/` geloggt
@@ -479,129 +238,37 @@ pip3 install keyring cryptography
 3. **Fehlerbehebungs-Abschnitt prüfen** - Dein Problem könnte oben aufgeführt sein
 4. **GitHub-Issue erstellen** - Füge Log-Ausschnitte hinzu und beschreibe was du versucht hast
 
----
-
-## 📚 Weitere Informationen
-
-### Logs
-
-Logs werden in `cachyos-multi-updater/logs/` gespeichert mit Namen wie `update-20241215-143022.log`.
-
-**Logs anzeigen:**
-```bash
-# Alle Logs auflisten
-ls -lh cachyos-multi-updater/logs/
-
-# Neuestes Log anzeigen
-cat cachyos-multi-updater/logs/$(ls -t cachyos-multi-updater/logs/ | head -1)
-
-# Nach Fehlern suchen
-grep -i error cachyos-multi-updater/logs/update-*.log
-```
-
-### Statistiken
-
-Update-Statistiken anzeigen:
-```bash
-./cachyos-multi-updater/update-all.sh --stats
-```
-
-Zeigt:
-- Gesamtanzahl der Updates
-- Erfolgreiche vs. fehlgeschlagene Updates
-- Erfolgsrate in Prozent
-- Durchschnittliche Update-Dauer
-- Zeitstempel des letzten Updates
-
-### Desktop-Verknüpfung
-
-Das Setup-Script kann eine Desktop-Verknüpfung erstellen. Oder manuell erstellen:
-
-```bash
-cd cachyos-multi-updater
-./create-desktop-shortcut.sh
-```
-
-### Script aktualisieren
-
-Wenn du mit Git geklont hast:
-```bash
-cd cachyos-multi-updater
-git pull
-```
-
----
-
-## ❓ FAQ
-
-### Q: Wie oft sollte ich dieses Script ausführen?
-
-**A:** Das hängt von deiner Präferenz ab:
-- Täglich (für Sicherheits-Updates)
-- Wöchentlich (ausgewogener Ansatz)
-- Vor wichtigen Arbeitssitzungen
-- Bei Benachrichtigungen über Updates
-
-### Q: Ist es sicher, es automatisch (via cron) auszuführen?
-
-**A:** Ja, aber mit Vorsicht:
-- Das Script hat Fehlerbehandlung
-- Benötigt sudo-Zugriff (richtig konfigurieren)
-- Zuerst manuell testen
-- Erwäge `--dry-run` in cron zu verwenden
-
-### Q: Kann ich das auf normalem Arch Linux verwenden?
-
-**A:** Ja! Obwohl für CachyOS entwickelt, funktioniert es auch auf Arch Linux.
-
-### Q: Schließt und startet das Script Cursor automatisch neu?
-
-**A:** Nein, das Script schließt oder startet Cursor NICHT automatisch neu. Es lädt und installiert nur das Update. Du kannst Cursor manuell neu starten falls nötig.
-
-### Q: Wird dieses Script mein System kaputt machen?
-
-**A:** Das Script ist darauf ausgelegt, sicher zu sein:
-- Verwendet Standard-Paketmanager
-- Hat Fehlerbehandlung
-- Erstellt Backup der AdGuard Home-Konfiguration
-- Loggt alles
-
-Jedoch trägt jedes System-Update ein gewisses Risiko. Verwende zuerst `--dry-run` wenn du unsicher bist!
-
-### Q: Kann ich anpassen, was aktualisiert wird?
-
-**A:** Ja! Mehrere Möglichkeiten:
-1. **Konfigurationsdatei** (`config.conf`) - Komponenten aktivieren/deaktivieren
-2. **Befehlszeilen-Flags** - `--only-system`, `--only-aur`, etc.
-3. **Beides kombinieren** - Config für Standardwerte, Flags für einmalige Änderungen
-
----
-
-## 📅 Versionshistorie
-
-Für die vollständige Versionshistorie und Changelog siehe [GitHub Releases](https://github.com/benjarogit/sc-cachyos-multi-updater/releases).
-
----
-
-## 📄 Lizenz
-
-Dieses Projekt ist Open Source. Du kannst es frei verwenden, modifizieren und unter den Bedingungen der MIT-Lizenz verteilen.
-
-## 🤝 Beitragen
+## Beitragen
 
 Verbesserungen und Fehlerberichte sind willkommen! Bitte erstelle ein Issue oder Pull Request auf [GitHub](https://github.com/benjarogit/sc-cachyos-multi-updater).
 
-## 📧 Support
+### Entwicklungsumgebung
 
-Bei Fragen oder Problemen:
-1. Prüfe die Log-Dateien in `cachyos-multi-updater/logs/`
-2. Prüfe den [Fehlerbehebungs](#-fehlerbehebung) Abschnitt oben
-3. Erstelle ein Issue auf [GitHub](https://github.com/benjarogit/sc-cachyos-multi-updater)
+```bash
+git clone https://github.com/benjarogit/sc-cachyos-multi-updater.git
+cd sc-cachyos-multi-updater
+python -m venv venv
+source venv/bin/activate
+pip install -r cachyos-multi-updater/requirements-gui.txt
+pip install pytest pytest-cov pytest-qt
+```
 
-## 🔗 Links
+### Tests ausführen
+
+```bash
+cd cachyos-multi-updater
+pytest gui/tests/ -v --cov=gui/core --cov=gui/utils --cov=gui/dialogs --cov=gui/widgets
+```
+
+## Lizenz
+
+Dieses Projekt ist Open Source. Du kannst es frei verwenden, modifizieren und unter den Bedingungen der MIT-Lizenz verteilen.
+
+## Links
 
 - **GitHub Repository:** https://github.com/benjarogit/sc-cachyos-multi-updater
 - **Issues:** https://github.com/benjarogit/sc-cachyos-multi-updater/issues
+- **Releases:** https://github.com/benjarogit/sc-cachyos-multi-updater/releases
 
 ---
 

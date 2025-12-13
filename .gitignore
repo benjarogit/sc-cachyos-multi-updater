@@ -62,12 +62,26 @@ IMPROVEMENTS.md
 create-release.sh
 CHANGELOG.md
 
-# Test files (optional - remove if not needed)
-tests/
-
-.cursor/
+# Python cache and compiled files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyo
+
+# Test coverage and cache
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE and workspace files
+.cursor/
+*.code-workspace
+*.code-workspace.backup
 
 # Report files (internal development)
 CODE_QUALITY_REPORT.md
@@ -75,9 +89,6 @@ FINAL_AUDIT_REPORT.md
 GUI_RELEASE_CHECK.md
 RISK_ASSESSMENT_REPORT.md
 PRODUKTIONSREIFE_AUDIT.md
-IMPROVEMENTS.md
-*.pyo
-__pycache__
 
 # Best Practices documentation (internal)
 **/BEST_PRACTICES_*.md
@@ -85,10 +96,6 @@ __pycache__
 
 # PyDracula (removed, not used)
 **/pydracula/
-
-# Workspace files (IDE-specific)
-*.code-workspace
-*.code-workspace.backup
 
 # VERSION file (local only, not committed)
 VERSION

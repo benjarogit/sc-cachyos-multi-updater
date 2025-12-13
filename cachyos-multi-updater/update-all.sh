@@ -15,7 +15,7 @@
 set -euo pipefail
 
 # ========== Version ==========
-readonly SCRIPT_VERSION="1.0.19"
+readonly SCRIPT_VERSION="2.3.0"
 readonly GITHUB_REPO="benjarogit/sc-cachyos-multi-updater"
 
 # ========== Exit-Codes ==========
